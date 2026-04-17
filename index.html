@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bob2 Distance - Double Pendulum Chaos</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #eaeaea;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1rem;
+        }
+
+        h1 { font-size: 1.5rem; margin-bottom: 0.5rem; color: #8cf; }
+        .subtitle { font-size: 0.85rem; color: #888; margin-bottom: 1rem; }
+
+        .container {
+            display: flex;
+            gap: 1rem;
+            max-width: 100%;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .canvas-wrapper {
+            position: relative;
+            background: #0a0a0a;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        canvas { display: block; cursor: crosshair; }
+
+        #zoomOverlay {
+            position: absolute;
+            pointer-events: none;
+            z-index: 20;
+            border: 2px dashed rgba(100, 200, 255, 0.8);
+            background: rgba(100, 200, 255, 0.1);
+            display: none;
+        }
+
+        .controls {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            width: 280px;
+        }
+
+        .control-group { margin-bottom: 0.75rem; }
+
+        .control-group label {
+            display: block;
+            font-size: 0.75rem;
+            color: #aaa;
+            margin-bottom: 0.25rem;
+        }
+
+        .control-group input[type="range"] { width: 100%; accent-color: #6af; }
+
+        .control-group select,
+        .control-group input[type="number"] {
+            width: 100%;
+            padding: 0.35rem 0.5rem;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: #fff;
+            font-size: 0.8rem;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 0.5rem;
+            background: rgba(100, 150, 255, 0.2);
+            border: 1px solid rgba(100, 150, 255, 0.3);
+            border-radius: 6px;
+            color: #8af;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 0.5rem;
+        }
+
+        .btn:hover { background: rgba(100, 150, 255, 0.3); }
+
+        .btn-primary {
+            background: rgba(100, 200, 100, 0.2);
+            border-color: rgba(100, 200, 100, 0.3);
+            color: #8f8;
+        }
+        .btn-primary:hover { background: rgba(100, 200, 100, 0.3); }
+
+        .btn-warning {
+            background: rgba(255, 200, 100, 0.2);
+            border-color: rgba(255, 200, 100, 0.3);
+            color: #fc8;
+        }
+        .btn-warning:hover { background: rgba(255, 200, 100, 0.3); }
+
+        .button-row { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+        .button-row .btn { flex: 1; margin-top: 0; }
+
+        .stats {
+            font-size: 0.7rem;
+            color: #888;
+            margin-top: 0.75rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .stats div { margin-bottom: 0.25rem; }
+        .stats span { color: #fc8; font-family: monospace; }
+
+        .legend {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+            font-size: 0.7rem;
+        }
+        .legend-gradient { flex: 1; height: 12px; border-radius: 2px; }
+
+        .viridis-gradient {
+            background: linear-gradient(90deg, rgb(68, 1, 84), rgb(33, 145, 140), rgb(253, 231, 37));
+        }
+
+        .rainbow-gradient {
+            background: linear-gradient(90deg, hsl(0,80%,50%), hsl(60,80%,50%), hsl(120,80%,50%), hsl(180,80%,50%), hsl(240,80%,50%), hsl(300,80%,50%));
+        }
+
+        .hint { font-size: 0.65rem; color: #666; margin-top: 0.5rem; text-align: center; }
+
+        .mode-indicator {
+            padding: 0.3rem 0.6rem;
+            background: rgba(100, 200, 255, 0.2);
+            border-radius: 4px;
+            font-size: 0.7rem;
+            color: #8cf;
+            margin-bottom: 0.5rem;
+            text-align: center;
+        }
+
+        @media (max-width: 700px) {
+            .container { flex-direction: column; align-items: center; }
+            .controls { width: 100%; max-width: 400px; }
+        }
+    </style>
+</head>
+<body>
+    <h1>Double Pendulum Chaos</h1>
+    <p class="subtitle" id="subtitle">Total distance traveled by the second pendulum bob</p>
+
+    <div class="container">
+        <div class="canvas-wrapper" id="canvasWrapper">
+            <canvas id="canvas" width="512" height="512"></canvas>
+            <div id="zoomOverlay"></div>
+        </div>
+
+        <div class="controls">
+            <div class="mode-indicator" id="modeIndicator">Mode: Bob2 Distance</div>
+
+            <div class="control-group">
+                <label>Visualization Mode</label>
+                <select id="vizMode">
+                    <option value="distance">Bob2 Distance</option>
+                    <option value="divergence">Divergence Time</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Resolution</label>
+                <select id="resolution">
+                    <option value="256">256 x 256</option>
+                    <option value="512" selected>512 x 512</option>
+                    <option value="1024">1024 x 1024</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>θ₁ Range (radians)</label>
+                <div style="display: flex; gap: 0.5rem;">
+                    <input type="number" id="theta1Min" value="-3.14" step="0.1">
+                    <span style="color: #666;">to</span>
+                    <input type="number" id="theta1Max" value="3.14" step="0.1">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>θ₂ Range (radians)</label>
+                <div style="display: flex; gap: 0.5rem;">
+                    <input type="number" id="theta2Min" value="-3.14" step="0.1">
+                    <span style="color: #666;">to</span>
+                    <input type="number" id="theta2Max" value="3.14" step="0.1">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Initial ω₁: <span id="omega1Value">0.0</span></label>
+                <input type="range" id="omega1" min="-5" max="5" step="0.1" value="0">
+            </div>
+
+            <div class="control-group">
+                <label>Initial ω₂: <span id="omega2Value">0.0</span></label>
+                <input type="range" id="omega2" min="-5" max="5" step="0.1" value="0">
+            </div>
+
+            <div id="distanceControls">
+                <div class="control-group">
+                    <label>Time Step (dt): <span id="dtValue">0.002</span></label>
+                    <input type="range" id="dt" min="0.001" max="0.01" step="0.001" value="0.002">
+                </div>
+
+                <div class="control-group">
+                    <label>Iterations per Frame: <span id="iterValue">10</span></label>
+                    <input type="range" id="iterations" min="1" max="50" value="10">
+                </div>
+            </div>
+
+            <div id="divergenceControls" style="display: none;">
+                <div class="control-group">
+                    <label>Max Iterations</label>
+                    <input type="number" id="maxIter" min="1" max="100000" value="5000">
+                </div>
+
+                <div class="control-group">
+                    <label>Time Step (dt): <span id="dtDivValue">0.002</span></label>
+                    <input type="range" id="dtDiv" min="0.001" max="0.01" step="0.001" value="0.002">
+                </div>
+
+                <div class="control-group">
+                    <label>Divergence Threshold: <span id="thresholdValue">0.05</span></label>
+                    <input type="range" id="threshold" min="0.01" max="0.5" step="0.01" value="0.05">
+                </div>
+
+                <div class="control-group">
+                    <label>Perturbation: <span id="perturbValue">0.00001</span></label>
+                    <input type="range" id="perturb" min="0.000001" max="0.001" step="0.000001" value="0.00001">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Color Map</label>
+                <select id="colormap">
+                    <option value="0" selected>Viridis</option>
+                    <option value="1">Magma</option>
+                    <option value="2">Plasma</option>
+                    <option value="3">Inferno</option>
+                    <option value="4">Turbo</option>
+                    <option value="5">Jet</option>
+                    <option value="6">Rainbow</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Tone Mapping</label>
+                <select id="toneMapping">
+                    <option value="0">Linear</option>
+                    <option value="1" selected>Logarithmic</option>
+                    <option value="2">Square Root</option>
+                    <option value="3">S-Curve</option>
+                </select>
+            </div>
+
+            <div class="button-row">
+                <button type="button" class="btn btn-warning" id="zoomOutBtn">Zoom Out</button>
+                <button type="button" class="btn btn-primary" id="resetBtn">Reset</button>
+            </div>
+            <button type="button" class="btn" id="downloadBtn">Download Image</button>
+
+            <div class="legend">
+                <span>Fast</span>
+                <div class="legend-gradient" id="legendGradient"></div>
+                <span>Slow</span>
+            </div>
+
+            <div class="stats">
+                <div id="frameRow">Frame: <span id="frameCount">0</span></div>
+                <div id="maxDistRow">Max Distance: <span id="maxDistance">0.00</span></div>
+                <div>FPS: <span id="fps">0</span></div>
+                <div>Zoom Level: <span id="zoomLevel">1</span></div>
+            </div>
+
+            <div class="hint" id="hintText">Drag to zoom in • Right-click or button to zoom out</div>
+        </div>
+    </div>
+
+    <script id="vertex-shader" type="x-shader/x-vertex">
+#version 300 es
+precision highp float;
+in vec2 a_position;
+out vec2 v_uv;
+void main() {
+    v_uv = a_position * 0.5 + 0.5;
+    gl_Position = vec4(a_position, 0.0, 1.0);
+}
+    </script>
+
+    <script id="init-shader" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+uniform vec2 u_theta1Range;
+uniform vec2 u_theta2Range;
+uniform float u_omega1;
+uniform float u_omega2;
+in vec2 v_uv;
+out vec4 fragColor;
+void main() {
+    float theta1 = mix(u_theta1Range.x, u_theta1Range.y, v_uv.x);
+    float theta2 = mix(u_theta2Range.x, u_theta2Range.y, v_uv.y);
+    fragColor = vec4(theta1, u_omega1, theta2, u_omega2);
+}
+    </script>
+
+    <script id="physics-shader" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+uniform sampler2D u_stateTexture;
+uniform float u_dt;
+in vec2 v_uv;
+out vec4 fragColor;
+
+const float m1 = 1.0;
+const float m2 = 1.0;
+const float L1 = 1.0;
+const float L2 = 1.0;
+const float g = 9.81;
+
+vec2 computeAccelerations(float theta1, float omega1, float theta2, float omega2) {
+    float delta = theta1 - theta2;
+    float sinDelta = sin(delta);
+    float cosDelta = cos(delta);
+    float denom = m1 + m2 * sinDelta * sinDelta;
+    
+    float num1 = -m2 * L1 * omega1 * omega1 * sinDelta * cosDelta
+               - m2 * L2 * omega2 * omega2 * sinDelta
+               - (m1 + m2) * g * sin(theta1)
+               + m2 * g * sin(theta2) * cosDelta;
+    
+    float num2 = (m1 + m2) * L1 * omega1 * omega1 * sinDelta
+               + m2 * L2 * omega2 * omega2 * sinDelta * cosDelta
+               + (m1 + m2) * g * sin(theta1) * cosDelta
+               - (m1 + m2) * g * sin(theta2);
+    
+    return vec2(num1 / (L1 * denom), num2 / (L2 * denom));
+}
+
+void main() {
+    vec4 state = texture(u_stateTexture, v_uv);
+    float theta1 = state.x, omega1 = state.y, theta2 = state.z, omega2 = state.w;
+    
+    vec2 accel = computeAccelerations(theta1, omega1, theta2, omega2);
+    float omega1_half = omega1 + 0.5 * u_dt * accel.x;
+    float omega2_half = omega2 + 0.5 * u_dt * accel.y;
+    float theta1_new = theta1 + u_dt * omega1_half;
+    float theta2_new = theta2 + u_dt * omega2_half;
+    
+    vec2 accel_new = computeAccelerations(theta1_new, omega1_half, theta2_new, omega2_half);
+    float omega1_new = omega1_half + 0.5 * u_dt * accel_new.x;
+    float omega2_new = omega2_half + 0.5 * u_dt * accel_new.y;
+    
+    fragColor = vec4(theta1_new, omega1_new, theta2_new, omega2_new);
+}
+    </script>
+
+    <script id="distance-shader" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+uniform sampler2D u_stateTexture;
+uniform sampler2D u_distanceTexture;
+uniform bool u_reset;
+in vec2 v_uv;
+out vec4 fragColor;
+
+void main() {
+    vec4 state = texture(u_stateTexture, v_uv);
+    float theta1 = state.x, theta2 = state.z;
+    
+    const float L1 = 1.0, L2 = 1.0;
+    float x1 = L1 * sin(theta1);
+    float y1 = -L1 * cos(theta1);
+    float x2 = x1 + L2 * sin(theta2);
+    float y2 = y1 - L2 * cos(theta2);
+    
+    vec4 prevData = texture(u_distanceTexture, v_uv);
+    float totalDist = prevData.z;
+    float valid = prevData.w;
+    
+    float newDist = (u_reset || valid < 0.5) ? 0.0 : totalDist + sqrt((x2-prevData.x)*(x2-prevData.x) + (y2-prevData.y)*(y2-prevData.y));
+    fragColor = vec4(x2, y2, newDist, 1.0);
+}
+    </script>
+
+    <script id="render-shader" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+
+uniform sampler2D u_dataTexture;
+uniform int u_colormap;
+uniform int u_toneMapping;
+uniform float u_maxValue;
+uniform bool u_isDivergenceMode;
+
+in vec2 v_uv;
+out vec4 fragColor;
+
+vec3 viridis(float t) {
+    vec3 c0 = vec3(68.0/255.0, 1.0/255.0, 84.0/255.0);
+    vec3 c1 = vec3(33.0/255.0, 145.0/255.0, 140.0/255.0);
+    vec3 c2 = vec3(253.0/255.0, 231.0/255.0, 37.0/255.0);
+    if (t < 0.5) return mix(c0, c1, t * 2.0);
+    return mix(c1, c2, (t - 0.5) * 2.0);
+}
+
+vec3 magma(float t) {
+    vec3 c0 = vec3(4.0/255.0, 5.0/255.0, 9.0/255.0);
+    vec3 c1 = vec3(148.0/255.0, 52.0/255.0, 110.0/255.0);
+    vec3 c2 = vec3(252.0/255.0, 253.0/255.0, 191.0/255.0);
+    if (t < 0.5) return mix(c0, c1, t * 2.0);
+    return mix(c1, c2, (t - 0.5) * 2.0);
+}
+
+vec3 plasma(float t) {
+    vec3 c0 = vec3(13.0/255.0, 8.0/255.0, 135.0/255.0);
+    vec3 c1 = vec3(156.0/255.0, 23.0/255.0, 158.0/255.0);
+    vec3 c2 = vec3(240.0/255.0, 249.0/255.0, 33.0/255.0);
+    if (t < 0.5) return mix(c0, c1, t * 2.0);
+    return mix(c1, c2, (t - 0.5) * 2.0);
+}
+
+vec3 inferno(float t) {
+    vec3 c0 = vec3(0.0/255.0, 0.0/255.0, 4.0/255.0);
+    vec3 c1 = vec3(187.0/255.0, 55.0/255.0, 84.0/255.0);
+    vec3 c2 = vec3(252.0/255.0, 255.0/255.0, 164.0/255.0);
+    if (t < 0.5) return mix(c0, c1, t * 2.0);
+    return mix(c1, c2, (t - 0.5) * 2.0);
+}
+
+vec3 turbo(float t) {
+    float r = clamp((48.0 + 227.0 * sin((t - 0.5) * 3.14159265)) / 255.0, 0.0, 1.0);
+    float g = clamp((t < 0.5 ? t * 400.0 : (1.0 - t) * 400.0) / 255.0, 0.0, 1.0);
+    float b = clamp((128.0 + 127.0 * cos(t * 3.14159265)) / 255.0, 0.0, 1.0);
+    return vec3(r, g, b);
+}
+
+vec3 jet(float t) {
+    float r = clamp(t < 0.5 ? 0.0 : (t - 0.5) * 2.0, 0.0, 1.0);
+    float g = clamp(t < 0.25 ? t * 4.0 : t < 0.75 ? 1.0 : (1.0 - t) * 4.0, 0.0, 1.0);
+    float b = clamp(t < 0.5 ? (0.5 - t) * 2.0 : 0.0, 0.0, 1.0);
+    return vec3(r, g, b);
+}
+
+vec3 rainbow(float t) {
+    float hue = (1.0 - t) * 0.85;
+    float s = 1.0, v = 1.0;
+    float c = v * s;
+    float x = c * (1.0 - abs(mod(hue * 6.0, 2.0) - 1.0));
+    float m = v - c;
+    vec3 rgb;
+    if (hue < 1.0/6.0) rgb = vec3(c, x, 0.0);
+    else if (hue < 2.0/6.0) rgb = vec3(x, c, 0.0);
+    else if (hue < 3.0/6.0) rgb = vec3(0.0, c, x);
+    else if (hue < 4.0/6.0) rgb = vec3(0.0, x, c);
+    else if (hue < 5.0/6.0) rgb = vec3(x, 0.0, c);
+    else rgb = vec3(c, 0.0, x);
+    return rgb + m;
+}
+
+vec3 applyColormap(float t, int mode) {
+    if (mode == 0) return viridis(t);
+    else if (mode == 1) return magma(t);
+    else if (mode == 2) return plasma(t);
+    else if (mode == 3) return inferno(t);
+    else if (mode == 4) return turbo(t);
+    else if (mode == 5) return jet(t);
+    else return rainbow(t);
+}
+
+void main() {
+    vec4 data = texture(u_dataTexture, v_uv);
+    float value;
+    
+    if (u_isDivergenceMode) {
+        value = data.r;
+        if (value <= 0.0) {
+            fragColor = vec4(0.05, 0.05, 0.1, 1.0);
+            return;
+        }
+    } else {
+        value = data.z;
+        if (data.w < 0.5) {
+            fragColor = vec4(0.1, 0.1, 0.1, 1.0);
+            return;
+        }
+    }
+    
+    float t;
+    if (u_toneMapping == 0) {
+        t = value / u_maxValue;
+    } else if (u_toneMapping == 1) {
+        t = log(1.0 + value) / log(1.0 + u_maxValue);
+    } else if (u_toneMapping == 2) {
+        t = sqrt(value / u_maxValue);
+    } else {
+        float x = value / u_maxValue;
+        t = x * x * (3.0 - 2.0 * x);
+    }
+    
+    t = clamp(t, 0.0, 1.0);
+    vec3 color = applyColormap(1.0 - t, u_colormap);
+    fragColor = vec4(color, 1.0);
+}
+    </script>
+
+    <script id="init-divergence-shader" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+uniform vec2 u_theta1Range;
+uniform vec2 u_theta2Range;
+uniform float u_omega1;
+uniform float u_omega2;
+uniform float u_perturb;
+uniform float u_seed;
+in vec2 v_uv;
+layout(location = 0) out vec4 baseState;
+layout(location = 1) out vec4 perturbedState;
+layout(location = 2) out vec4 divergenceData;
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+void main() {
+    float theta1 = mix(u_theta1Range.x, u_theta1Range.y, v_uv.x);
+    float theta2 = mix(u_theta2Range.x, u_theta2Range.y, v_uv.y);
+    float r = hash(v_uv * 1000.0 + u_seed);
+    float perturb_theta1 = (r - 0.5) * 2.0 * u_perturb;
+    float perturb_theta2 = (hash(v_uv * 1000.0 + vec2(100.0, u_seed)) - 0.5) * 2.0 * u_perturb;
+    baseState = vec4(theta1, u_omega1, theta2, u_omega2);
+    perturbedState = vec4(theta1 + perturb_theta1, u_omega1, theta2 + perturb_theta2, u_omega2);
+    divergenceData = vec4(0.0, 0.0, 0.0, 1.0);
+}
+    </script>
+
+    <script id="divergence-shader" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+uniform sampler2D u_stateTexture;
+uniform sampler2D u_perturbedTexture;
+uniform sampler2D u_divergenceTexture;
+uniform float u_dt;
+uniform float u_threshold;
+uniform int u_currentIter;
+in vec2 v_uv;
+layout(location = 0) out vec4 baseState;
+layout(location = 1) out vec4 perturbedState;
+layout(location = 2) out vec4 divergenceData;
+const float m1 = 1.0;
+const float m2 = 1.0;
+const float L1 = 1.0;
+const float L2 = 1.0;
+const float g = 9.81;
+const float PI = 3.14159265359;
+vec2 computeAccelerations(float theta1, float omega1, float theta2, float omega2) {
+    float delta = theta1 - theta2;
+    float sinDelta = sin(delta);
+    float cosDelta = cos(delta);
+    float denom = m1 + m2 * sinDelta * sinDelta;
+    float num1 = -m2 * L1 * omega1 * omega1 * sinDelta * cosDelta
+               - m2 * L2 * omega2 * omega2 * sinDelta
+               - (m1 + m2) * g * sin(theta1)
+               + m2 * g * sin(theta2) * cosDelta;
+    float num2 = (m1 + m2) * L1 * omega1 * omega1 * sinDelta
+               + m2 * L2 * omega2 * omega2 * sinDelta * cosDelta
+               + (m1 + m2) * g * sin(theta1) * cosDelta
+               - (m1 + m2) * g * sin(theta2);
+    return vec2(num1 / (L1 * denom), num2 / (L2 * denom));
+}
+void verletStep(inout float theta1, inout float omega1, inout float theta2, inout float omega2) {
+    vec2 accel = computeAccelerations(theta1, omega1, theta2, omega2);
+    float omega1_half = omega1 + 0.5 * u_dt * accel.x;
+    float omega2_half = omega2 + 0.5 * u_dt * accel.y;
+    theta1 += u_dt * omega1_half;
+    theta2 += u_dt * omega2_half;
+    vec2 accel_new = computeAccelerations(theta1, omega1_half, theta2, omega2_half);
+    omega1 = omega1_half + 0.5 * u_dt * accel_new.x;
+    omega2 = omega2_half + 0.5 * u_dt * accel_new.y;
+}
+float circularDiff(float a, float b) {
+    float d = a - b;
+    return d - 2.0 * PI * floor(d / (2.0 * PI) + 0.5);
+}
+float measureDivergence(float t1a, float o1a, float t2a, float o2a, float t1b, float o1b, float t2b, float o2b) {
+    float d1 = circularDiff(t1a, t1b);
+    float d2 = circularDiff(t2a, t2b);
+    return sqrt(d1*d1 + d2*d2 + (o1a-o1b)*(o1a-o1b) + (o2a-o2b)*(o2a-o2b));
+}
+void main() {
+    vec4 base = texture(u_stateTexture, v_uv);
+    vec4 pert = texture(u_perturbedTexture, v_uv);
+    vec4 div = texture(u_divergenceTexture, v_uv);
+    float iter = div.r;
+    float hasDiv = div.g;
+    verletStep(base.x, base.y, base.z, base.w);
+    verletStep(pert.x, pert.y, pert.z, pert.w);
+    if (hasDiv < 0.5) {
+        float dist = measureDivergence(base.x, base.y, base.z, base.w, pert.x, pert.y, pert.z, pert.w);
+        if (dist > u_threshold) {
+            iter = float(u_currentIter);
+            hasDiv = 1.0;
+        }
+    }
+    baseState = base;
+    perturbedState = pert;
+    divergenceData = vec4(iter, hasDiv, 0.0, 1.0);
+}
+    </script>
+
+    <script>
+        class ChaosRenderer {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.gl = canvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
+                if (!this.gl) { alert('WebGL 2.0 not supported!'); return; }
+                this.gl.getExtension('EXT_color_buffer_float');
+                
+                this.vizMode = 'distance';
+                this.resolution = 512;
+                this.theta1Range = [-3.14, 3.14];
+                this.theta2Range = [-3.14, 3.14];
+                this.omega1 = 0;
+                this.omega2 = 0;
+                
+                this.dt = 0.002;
+                this.iterationsPerFrame = 10;
+                this.maxIter = 5000;
+                this.threshold = 0.05;
+                this.perturb = 0.00001;
+                this.colormap = 0;
+                this.toneMapping = 1;
+                
+                this.frameCount = 0;
+                this.maxValue = 0;
+                this.readIndex = 0;
+                this.zoomHistory = [];
+                this.isDragging = false;
+                this.dragStart = null;
+                this.dragCurrent = null;
+                
+                this.lastTime = performance.now();
+                this.fps = 0;
+                this.seed = Math.random() * 1000;
+                this.divergenceInterval = null;
+                this.divergenceRenderInterval = null;
+                
+                this.init();
+            }
+            
+            init() {
+                this.createPrograms();
+                this.createBuffers();
+                this.createTextures();
+                this.setupControls();
+                this.setupZoomControls();
+                this.reset();
+                this.animate();
+            }
+            
+            compileShader(type, source) {
+                const gl = this.gl;
+                const shader = gl.createShader(type);
+                gl.shaderSource(shader, source.trim());
+                gl.compileShader(shader);
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    console.error('Shader error:', gl.getShaderInfoLog(shader));
+                    return null;
+                }
+                return shader;
+            }
+            
+            createProgram(vsId, fsId) {
+                const gl = this.gl;
+                const vs = this.compileShader(gl.VERTEX_SHADER, document.getElementById(vsId).textContent);
+                const fs = this.compileShader(gl.FRAGMENT_SHADER, document.getElementById(fsId).textContent);
+                const program = gl.createProgram();
+                gl.attachShader(program, vs);
+                gl.attachShader(program, fs);
+                gl.linkProgram(program);
+                if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                    console.error('Program link error:', gl.getProgramInfoLog(program));
+                    return null;
+                }
+                return program;
+            }
+            
+            createPrograms() {
+                this.programs = {
+                    init: this.createProgram('vertex-shader', 'init-shader'),
+                    physics: this.createProgram('vertex-shader', 'physics-shader'),
+                    distance: this.createProgram('vertex-shader', 'distance-shader'),
+                    initDivergence: this.createProgram('vertex-shader', 'init-divergence-shader'),
+                    divergence: this.createProgram('vertex-shader', 'divergence-shader'),
+                    render: this.createProgram('vertex-shader', 'render-shader')
+                };
+            }
+            
+            createBuffers() {
+                const gl = this.gl;
+                const positions = new Float32Array([-1,-1, 1,-1, -1,1, 1,1]);
+                this.quadBuffer = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
+                gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+                
+                this.vaos = {};
+                for (const [name, program] of Object.entries(this.programs)) {
+                    const vao = gl.createVertexArray();
+                    gl.bindVertexArray(vao);
+                    gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
+                    const posLoc = gl.getAttribLocation(program, 'a_position');
+                    gl.enableVertexAttribArray(posLoc);
+                    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+                    this.vaos[name] = vao;
+                }
+                gl.bindVertexArray(null);
+            }
+            
+            createTextures() {
+                const gl = this.gl;
+                const res = this.resolution;
+
+                this.stateTextures = [this.createFloatTexture(res), this.createFloatTexture(res)];
+                this.perturbedStateTextures = [this.createFloatTexture(res), this.createFloatTexture(res)];
+                this.dataTextures = [this.createFloatTexture(res), this.createFloatTexture(res)];
+                this.framebuffers = [gl.createFramebuffer(), gl.createFramebuffer()];
+                this.readIndex = 0;
+            }
+            
+            createFloatTexture(size) {
+                const gl = this.gl;
+                const tex = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, tex);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, size, size, 0, gl.RGBA, gl.FLOAT, null);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                return tex;
+            }
+            
+            setupControls() {
+                document.getElementById('vizMode').addEventListener('change', (e) => {
+                    this.vizMode = e.target.value;
+                    this.updateModeUI();
+                    this.reset();
+                });
+                
+                document.getElementById('resolution').addEventListener('change', (e) => {
+                    this.resolution = parseInt(e.target.value);
+                    this.canvas.width = this.resolution;
+                    this.canvas.height = this.resolution;
+                    this.createTextures();
+                    this.reset();
+                });
+                
+                ['theta1Min', 'theta1Max', 'theta2Min', 'theta2Max'].forEach(id => {
+                    document.getElementById(id).addEventListener('change', (e) => {
+                        const val = parseFloat(e.target.value);
+                        if (id === 'theta1Min') this.theta1Range[0] = val;
+                        else if (id === 'theta1Max') this.theta1Range[1] = val;
+                        else if (id === 'theta2Min') this.theta2Range[0] = val;
+                        else if (id === 'theta2Max') this.theta2Range[1] = val;
+                        this.zoomHistory = [];
+                        this.updateZoomLevel();
+                        this.reset();
+                    });
+                });
+                
+                document.getElementById('omega1').addEventListener('input', (e) => {
+                    this.omega1 = parseFloat(e.target.value);
+                    document.getElementById('omega1Value').textContent = this.omega1.toFixed(1);
+                    this.reset();
+                });
+                
+                document.getElementById('omega2').addEventListener('input', (e) => {
+                    this.omega2 = parseFloat(e.target.value);
+                    document.getElementById('omega2Value').textContent = this.omega2.toFixed(1);
+                    this.reset();
+                });
+                
+                document.getElementById('dt').addEventListener('input', (e) => {
+                    this.dt = parseFloat(e.target.value);
+                    document.getElementById('dtValue').textContent = this.dt.toFixed(3);
+                });
+                
+                document.getElementById('iterations').addEventListener('input', (e) => {
+                    this.iterationsPerFrame = parseInt(e.target.value);
+                    document.getElementById('iterValue').textContent = this.iterationsPerFrame;
+                });
+                
+                document.getElementById('maxIter').addEventListener('change', (e) => {
+                    this.maxIter = parseInt(e.target.value);
+                    this.reset();
+                });
+                
+                document.getElementById('dtDiv').addEventListener('input', (e) => {
+                    this.dt = parseFloat(e.target.value);
+                    document.getElementById('dtDivValue').textContent = this.dt.toFixed(3);
+                    this.reset();
+                });
+                
+                document.getElementById('threshold').addEventListener('input', (e) => {
+                    this.threshold = parseFloat(e.target.value);
+                    document.getElementById('thresholdValue').textContent = this.threshold.toFixed(2);
+                    this.reset();
+                });
+                
+                document.getElementById('perturb').addEventListener('input', (e) => {
+                    this.perturb = parseFloat(e.target.value);
+                    document.getElementById('perturbValue').textContent = this.perturb.toFixed(6);
+                    this.reset();
+                });
+                
+                document.getElementById('colormap').addEventListener('change', (e) => {
+                    this.colormap = parseInt(e.target.value);
+                    this.updateLegend();
+                });
+                
+                document.getElementById('toneMapping').addEventListener('change', (e) => {
+                    this.toneMapping = parseInt(e.target.value);
+                });
+                
+                document.getElementById('resetBtn').addEventListener('click', () => {
+                    this.theta1Range = [-3.14, 3.14];
+                    this.theta2Range = [-3.14, 3.14];
+                    this.zoomHistory = [];
+                    this.updateRangeInputs();
+                    this.updateZoomLevel();
+                    this.reset();
+                });
+                
+                document.getElementById('downloadBtn').addEventListener('click', () => this.download());
+                
+                this.updateModeUI();
+                this.updateLegend();
+            }
+            
+            updateModeUI() {
+                const isDistance = this.vizMode === 'distance';
+                document.getElementById('distanceControls').style.display = isDistance ? 'block' : 'none';
+                document.getElementById('divergenceControls').style.display = isDistance ? 'none' : 'block';
+                document.getElementById('modeIndicator').textContent = 'Mode: ' + (isDistance ? 'Bob2 Distance' : 'Divergence Time');
+                document.getElementById('subtitle').textContent = isDistance 
+                    ? 'Total distance traveled by the second pendulum bob'
+                    : 'Iterations until perturbed trajectory diverges';
+                document.getElementById('frameRow').style.display = isDistance ? 'block' : 'none';
+                document.getElementById('maxDistRow').style.display = isDistance ? 'block' : 'none';
+            }
+            
+            updateLegend() {
+                const gradient = document.getElementById('legendGradient');
+                const isRainbow = this.colormap === 6;
+                gradient.className = 'legend-gradient ' + (isRainbow ? 'rainbow-gradient' : 'viridis-gradient');
+            }
+            
+            setupZoomControls() {
+                const overlay = document.getElementById('zoomOverlay');
+                
+                this.canvas.addEventListener('mousedown', (e) => {
+                    if (e.button !== 0) return;
+                    const rect = this.canvas.getBoundingClientRect();
+                    const x = (e.clientX - rect.left) * (this.canvas.width / rect.width);
+                    const y = (e.clientY - rect.top) * (this.canvas.height / rect.height);
+                    this.isDragging = true;
+                    this.dragStart = { x, y };
+                    this.dragCurrent = { x, y };
+                });
+                
+                this.canvas.addEventListener('mousemove', (e) => {
+                    if (!this.isDragging) return;
+                    const rect = this.canvas.getBoundingClientRect();
+                    this.dragCurrent = {
+                        x: (e.clientX - rect.left) * (this.canvas.width / rect.width),
+                        y: (e.clientY - rect.top) * (this.canvas.height / rect.height)
+                    };
+                    this.updateZoomOverlay();
+                });
+                
+                this.canvas.addEventListener('mouseup', (e) => {
+                    if (!this.isDragging) return;
+                    const rect = this.canvas.getBoundingClientRect();
+                    this.dragCurrent = {
+                        x: (e.clientX - rect.left) * (this.canvas.width / rect.width),
+                        y: (e.clientY - rect.top) * (this.canvas.height / rect.height)
+                    };
+                    const dragDist = Math.sqrt(Math.pow(this.dragCurrent.x - this.dragStart.x, 2) + 
+                                               Math.pow(this.dragCurrent.y - this.dragStart.y, 2));
+                    if (dragDist > 5) this.applyZoomRectangle();
+                    this.isDragging = false;
+                    this.dragStart = null;
+                    this.dragCurrent = null;
+                    overlay.style.display = 'none';
+                });
+                
+                this.canvas.addEventListener('mouseleave', () => {
+                    this.isDragging = false;
+                    this.dragStart = null;
+                    this.dragCurrent = null;
+                    overlay.style.display = 'none';
+                });
+                
+                this.canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); this.zoomOut(); });
+                document.getElementById('zoomOutBtn').addEventListener('click', () => this.zoomOut());
+            }
+            
+            updateZoomOverlay() {
+                const overlay = document.getElementById('zoomOverlay');
+                const wrapper = document.getElementById('canvasWrapper');
+                const canvasRect = this.canvas.getBoundingClientRect();
+                const wrapperRect = wrapper.getBoundingClientRect();
+                const scaleX = wrapperRect.width / this.canvas.width;
+                const scaleY = wrapperRect.height / this.canvas.height;
+                
+                const x1 = Math.min(this.dragStart.x, this.dragCurrent.x) * scaleX;
+                const y1 = Math.min(this.dragStart.y, this.dragCurrent.y) * scaleY;
+                const x2 = Math.max(this.dragStart.x, this.dragCurrent.x) * scaleX;
+                const y2 = Math.max(this.dragStart.y, this.dragCurrent.y) * scaleY;
+                
+                overlay.style.display = 'block';
+                overlay.style.left = x1 + 'px';
+                overlay.style.top = y1 + 'px';
+                overlay.style.width = (x2 - x1) + 'px';
+                overlay.style.height = (y2 - y1) + 'px';
+            }
+            
+            applyZoomRectangle() {
+                const nx1 = Math.max(0, Math.min(1, Math.min(this.dragStart.x, this.dragCurrent.x) / this.canvas.width));
+                const nx2 = Math.max(0, Math.min(1, Math.max(this.dragStart.x, this.dragCurrent.x) / this.canvas.width));
+                const ny1 = Math.max(0, Math.min(1, 1 - Math.max(this.dragStart.y, this.dragCurrent.y) / this.canvas.height));
+                const ny2 = Math.max(0, Math.min(1, 1 - Math.min(this.dragStart.y, this.dragCurrent.y) / this.canvas.height));
+                
+                const dataX1 = this.theta1Range[0] + nx1 * (this.theta1Range[1] - this.theta1Range[0]);
+                const dataX2 = this.theta1Range[0] + nx2 * (this.theta1Range[1] - this.theta1Range[0]);
+                const dataY1 = this.theta2Range[0] + ny1 * (this.theta2Range[1] - this.theta2Range[0]);
+                const dataY2 = this.theta2Range[0] + ny2 * (this.theta2Range[1] - this.theta2Range[0]);
+                
+                this.zoomHistory.push({ theta1: [...this.theta1Range], theta2: [...this.theta2Range] });
+                this.theta1Range = [Math.min(dataX1, dataX2), Math.max(dataX1, dataX2)];
+                this.theta2Range = [Math.min(dataY1, dataY2), Math.max(dataY1, dataY2)];
+                
+                this.updateRangeInputs();
+                this.updateZoomLevel();
+                this.reset();
+            }
+            
+            zoomOut() {
+                if (this.zoomHistory.length > 0) {
+                    const prev = this.zoomHistory.pop();
+                    this.theta1Range = prev.theta1;
+                    this.theta2Range = prev.theta2;
+                } else {
+                    this.theta1Range = [-3.14, 3.14];
+                    this.theta2Range = [-3.14, 3.14];
+                }
+                this.updateRangeInputs();
+                this.updateZoomLevel();
+                this.reset();
+            }
+            
+            updateRangeInputs() {
+                document.getElementById('theta1Min').value = this.theta1Range[0].toFixed(2);
+                document.getElementById('theta1Max').value = this.theta1Range[1].toFixed(2);
+                document.getElementById('theta2Min').value = this.theta2Range[0].toFixed(2);
+                document.getElementById('theta2Max').value = this.theta2Range[1].toFixed(2);
+            }
+            
+            updateZoomLevel() {
+                document.getElementById('zoomLevel').textContent = this.zoomHistory.length + 1;
+            }
+            
+            reset() {
+                const gl = this.gl;
+                this.frameCount = 0;
+                this.maxValue = 0;
+                this.readIndex = 0;
+                this.seed = Math.random() * 1000;
+                this.stopDivergence();
+                const res = this.resolution;
+                
+                if (this.vizMode === 'distance') {
+                    gl.useProgram(this.programs.init);
+                    gl.bindVertexArray(this.vaos.init);
+                    gl.uniform2f(gl.getUniformLocation(this.programs.init, 'u_theta1Range'), this.theta1Range[0], this.theta1Range[1]);
+                    gl.uniform2f(gl.getUniformLocation(this.programs.init, 'u_theta2Range'), this.theta2Range[0], this.theta2Range[1]);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.init, 'u_omega1'), this.omega1);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.init, 'u_omega2'), this.omega2);
+                    
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.stateTextures[0], 0);
+                    gl.viewport(0, 0, res, res);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    
+                    gl.useProgram(this.programs.distance);
+                    gl.bindVertexArray(this.vaos.distance);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distance, 'u_stateTexture'), 0);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distance, 'u_distanceTexture'), 1);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distance, 'u_reset'), 1);
+                    
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.bindTexture(gl.TEXTURE_2D, this.stateTextures[0]);
+                    gl.activeTexture(gl.TEXTURE1);
+                    gl.bindTexture(gl.TEXTURE_2D, this.dataTextures[0]);
+                    
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[1]);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.dataTextures[1], 0);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    
+                    [this.dataTextures[0], this.dataTextures[1]] = [this.dataTextures[1], this.dataTextures[0]];
+                } else if (this.vizMode === 'divergence') {
+                    gl.useProgram(this.programs.initDivergence);
+                    gl.bindVertexArray(this.vaos.initDivergence);
+                    gl.uniform2f(gl.getUniformLocation(this.programs.initDivergence, 'u_theta1Range'), this.theta1Range[0], this.theta1Range[1]);
+                    gl.uniform2f(gl.getUniformLocation(this.programs.initDivergence, 'u_theta2Range'), this.theta2Range[0], this.theta2Range[1]);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.initDivergence, 'u_omega1'), this.omega1);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.initDivergence, 'u_omega2'), this.omega2);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.initDivergence, 'u_perturb'), this.perturb);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.initDivergence, 'u_seed'), this.seed);
+
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.stateTextures[0], 0);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, this.perturbedStateTextures[0], 0);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT2, gl.TEXTURE_2D, this.dataTextures[0], 0);
+                    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
+                    gl.viewport(0, 0, res, res);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    this.readIndex = 0;
+                    this.startDivergence();
+                }
+
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                gl.bindVertexArray(null);
+            }
+
+            startDivergence() {
+                this.stopDivergence();
+                this.divergenceInterval = setInterval(() => {
+                    if (this.frameCount >= this.maxIter) {
+                        this.stopDivergence();
+                        this.computeMaxValue();
+                        return;
+                    }
+                    const gl = this.gl;
+                    const res = this.resolution;
+                    const batchSize = 20;
+                    for (let i = 0; i < batchSize; i++) {
+                        if (this.frameCount >= this.maxIter) break;
+                        this.frameCount++;
+                        const readIdx = this.readIndex;
+                        const writeIdx = 1 - this.readIndex;
+                        gl.useProgram(this.programs.divergence);
+                        gl.bindVertexArray(this.vaos.divergence);
+                        gl.uniform1i(gl.getUniformLocation(this.programs.divergence, 'u_stateTexture'), 0);
+                        gl.uniform1i(gl.getUniformLocation(this.programs.divergence, 'u_perturbedTexture'), 1);
+                        gl.uniform1i(gl.getUniformLocation(this.programs.divergence, 'u_divergenceTexture'), 2);
+                        gl.uniform1f(gl.getUniformLocation(this.programs.divergence, 'u_dt'), this.dt);
+                        gl.uniform1f(gl.getUniformLocation(this.programs.divergence, 'u_threshold'), this.threshold);
+                        gl.uniform1i(gl.getUniformLocation(this.programs.divergence, 'u_currentIter'), this.frameCount);
+                        gl.activeTexture(gl.TEXTURE0);
+                        gl.bindTexture(gl.TEXTURE_2D, this.stateTextures[readIdx]);
+                        gl.activeTexture(gl.TEXTURE1);
+                        gl.bindTexture(gl.TEXTURE_2D, this.perturbedStateTextures[readIdx]);
+                        gl.activeTexture(gl.TEXTURE2);
+                        gl.bindTexture(gl.TEXTURE_2D, this.dataTextures[readIdx]);
+                        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
+                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.stateTextures[writeIdx], 0);
+                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, this.perturbedStateTextures[writeIdx], 0);
+                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT2, gl.TEXTURE_2D, this.dataTextures[writeIdx], 0);
+                        gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
+                        gl.viewport(0, 0, res, res);
+                        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                        this.readIndex = writeIdx;
+                    }
+                }, 20);
+                this.divergenceRenderInterval = setInterval(() => this.computeMaxValue(), 500);
+            }
+
+            stopDivergence() {
+                if (this.divergenceInterval) {
+                    clearInterval(this.divergenceInterval);
+                    this.divergenceInterval = null;
+                }
+                if (this.divergenceRenderInterval) {
+                    clearInterval(this.divergenceRenderInterval);
+                    this.divergenceRenderInterval = null;
+                }
+            }
+
+            step() {
+                if (this.vizMode === 'divergence') return;
+
+                const gl = this.gl;
+                const res = this.resolution;
+
+                for (let i = 0; i < this.iterationsPerFrame; i++) {
+                    const readIdx = this.readIndex;
+                    const writeIdx = 1 - this.readIndex;
+
+                    gl.useProgram(this.programs.physics);
+                    gl.bindVertexArray(this.vaos.physics);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.physics, 'u_stateTexture'), 0);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.physics, 'u_dt'), this.dt);
+
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.bindTexture(gl.TEXTURE_2D, this.stateTextures[readIdx]);
+
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.stateTextures[writeIdx], 0);
+                    gl.viewport(0, 0, res, res);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+                    gl.useProgram(this.programs.distance);
+                    gl.bindVertexArray(this.vaos.distance);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distance, 'u_stateTexture'), 0);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distance, 'u_distanceTexture'), 1);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distance, 'u_reset'), 0);
+
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.bindTexture(gl.TEXTURE_2D, this.stateTextures[writeIdx]);
+                    gl.activeTexture(gl.TEXTURE1);
+                    gl.bindTexture(gl.TEXTURE_2D, this.dataTextures[readIdx]);
+
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[1]);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.dataTextures[writeIdx], 0);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+                    this.readIndex = writeIdx;
+                }
+
+                this.frameCount += this.iterationsPerFrame;
+            }
+            
+            render() {
+                const gl = this.gl;
+                if (this.vizMode === 'distance') {
+                    this.computeMaxValue();
+                }
+
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+                
+                gl.useProgram(this.programs.render);
+                gl.bindVertexArray(this.vaos.render);
+                
+                gl.uniform1i(gl.getUniformLocation(this.programs.render, 'u_dataTexture'), 0);
+                gl.uniform1i(gl.getUniformLocation(this.programs.render, 'u_colormap'), this.colormap);
+                gl.uniform1i(gl.getUniformLocation(this.programs.render, 'u_toneMapping'), this.toneMapping);
+                gl.uniform1f(gl.getUniformLocation(this.programs.render, 'u_maxValue'), this.maxValue || 1);
+                gl.uniform1i(gl.getUniformLocation(this.programs.render, 'u_isDivergenceMode'), this.vizMode === 'divergence' ? 1 : 0);
+                
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, this.dataTextures[this.readIndex]);
+
+                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                gl.bindVertexArray(null);
+            }
+            
+            computeMaxValue() {
+                const gl = this.gl;
+                const res = this.resolution;
+                const isDivergence = this.vizMode === 'divergence';
+
+                const tempFb = gl.createFramebuffer();
+                gl.bindFramebuffer(gl.FRAMEBUFFER, tempFb);
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.dataTextures[this.readIndex], 0);
+
+                const sampleSize = isDivergence ? res : Math.min(128, res);
+                const pixels = new Float32Array(sampleSize * sampleSize * 4);
+                gl.viewport(0, 0, sampleSize, sampleSize);
+                gl.readPixels(0, 0, sampleSize, sampleSize, gl.RGBA, gl.FLOAT, pixels);
+
+                let maxVal = 0;
+                const channel = isDivergence ? 0 : 2;
+                for (let i = 0; i < pixels.length; i += 4) {
+                    const val = pixels[i + channel];
+                    if (val > maxVal && isFinite(val)) maxVal = val;
+                }
+
+                this.maxValue = maxVal;
+                gl.deleteFramebuffer(tempFb);
+            }
+            
+            updateStats() {
+                const now = performance.now();
+                if (this.vizMode === 'divergence' && this.frameCount >= this.maxIter) {
+                    this.fps = 0;
+                } else {
+                    this.fps = Math.round(1000 / (now - this.lastTime));
+                }
+                this.lastTime = now;
+
+                document.getElementById('frameCount').textContent = this.frameCount;
+                document.getElementById('maxDistance').textContent = this.maxValue.toFixed(2);
+                document.getElementById('fps').textContent = this.fps;
+            }
+            
+            animate() {
+                this.step();
+                if (this.vizMode !== 'divergence' || this.frameCount < this.maxIter) {
+                    this.render();
+                }
+                this.updateStats();
+                requestAnimationFrame(() => this.animate());
+            }
+            
+            download() {
+                const link = document.createElement('a');
+                link.download = `chaos-${this.vizMode}-frame${this.frameCount}.png`;
+                link.href = this.canvas.toDataURL('image/png');
+                link.click();
+            }
+        }
+        
+        new ChaosRenderer(document.getElementById('canvas'));
+    </script>
+</body>
+</html>
