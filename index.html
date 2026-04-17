@@ -250,21 +250,21 @@
             <div class="control-group">
                 <label>Color Map</label>
                 <select id="colormap">
-                    <option value="0" selected>Viridis</option>
+                    <option value="0">Viridis</option>
                     <option value="1">Magma</option>
                     <option value="2">Plasma</option>
                     <option value="3">Inferno</option>
                     <option value="4">Turbo</option>
                     <option value="5">Jet</option>
-                    <option value="6">Rainbow</option>
+                    <option value="6" selected>Rainbow</option>
                 </select>
             </div>
 
             <div class="control-group">
                 <label>Tone Mapping</label>
                 <select id="toneMapping">
-                    <option value="0">Linear</option>
-                    <option value="1" selected>Logarithmic</option>
+                    <option value="0" selected>Linear</option>
+                    <option value="1">Logarithmic</option>
                     <option value="2">Square Root</option>
                     <option value="3">S-Curve</option>
                 </select>
@@ -491,7 +491,7 @@ void main() {
     if (u_isDivergenceMode) {
         value = data.r;
         if (value <= 0.0) {
-            fragColor = vec4(0.05, 0.05, 0.1, 1.0);
+            fragColor = vec4(1.0, 1.0, 1.0, 1.0);
             return;
         }
     } else {
@@ -642,8 +642,8 @@ void main() {
                 this.maxIter = 5000;
                 this.threshold = 0.05;
                 this.perturb = 0.00001;
-                this.colormap = 0;
-                this.toneMapping = 1;
+                this.colormap = 6;
+                this.toneMapping = 0;
                 
                 this.frameCount = 0;
                 this.maxValue = 0;
