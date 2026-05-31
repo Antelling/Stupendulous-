@@ -1212,6 +1212,338 @@ void main() {
                 await this.videoRenderer.run();
                 document.getElementById('visStartBtn').disabled = false;
             }
+
+            updateModeUI() {
+                const isDistance = this.vizMode === 'distance';
+                document.getElementById('distanceControls').style.display = isDistance ? 'block' : 'none';
+                document.getElementById('divergenceControls').style.display = isDistance ? 'none' : 'block';
+                document.getElementById('modeIndicator').textContent = 'Mode: ' + (isDistance ? 'Bob2 Distance' : 'Divergence Time');
+                document.getElementById('subtitle').textContent = isDistance
+                    ? 'Total distance traveled by the second pendulum bob'
+                    : 'Iterations until perturbed trajectory diverges';
+                document.getElementById('frameRow').style.display = isDistance ? 'block' : 'none';
+                document.getElementById('maxDistRow').style.display = isDistance ? 'block' : 'none';
+            }
+
+            updateLegend() {
+                const gradient = document.getElementById('legendGradient');
+                const isRainbow = this.colormap === 6;
+                gradient.className = 'legend-gradient ' + (isRainbow ? 'rainbow-gradient' : 'viridis-gradient');
+            }
+
+            setupZoomControls() {
+                const overlay = document.getElementById('zoomOverlay');
+                this.canvas.addEventListener('mousedown', (e) => {
+                    if (e.button !== 0) return;
+                    const rect = this.canvas.getBoundingClientRect();
+                    const x = (e.clientX - rect.left) * (this.canvas.width / rect.width);
+                    const y = (e.clientY - rect.top) * (this.canvas.height / rect.height);
+                    this.isDragging = true;
+                    this.dragStart = { x, y };
+                    this.dragCurrent = { x, y };
+                });
+                this.canvas.addEventListener('mousemove', (e) => {
+                    if (!this.isDragging) return;
+                    const rect = this.canvas.getBoundingClientRect();
+                    this.dragCurrent = {
+                        x: (e.clientX - rect.left) * (this.canvas.width / rect.width),
+                        y: (e.clientY - rect.top) * (this.canvas.height / rect.height)
+                    };
+                    this.updateZoomOverlay();
+                });
+                this.canvas.addEventListener('mouseup', (e) => {
+                    if (!this.isDragging) return;
+                    const rect = this.canvas.getBoundingClientRect();
+                    this.dragCurrent = {
+                        x: (e.clientX - rect.left) * (this.canvas.width / rect.width),
+                        y: (e.clientY - rect.top) * (this.canvas.height / rect.height)
+                    };
+                    const dragDist = Math.sqrt(Math.pow(this.dragCurrent.x - this.dragStart.x, 2) +
+                                               Math.pow(this.dragCurrent.y - this.dragStart.y, 2));
+                    if (dragDist > 5) this.applyZoomRectangle();
+                    this.isDragging = false;
+                    this.dragStart = null;
+                    this.dragCurrent = null;
+                    overlay.style.display = 'none';
+                });
+                this.canvas.addEventListener('mouseleave', () => {
+                    this.isDragging = false;
+                    this.dragStart = null;
+                    this.dragCurrent = null;
+                    overlay.style.display = 'none';
+                });
+                this.canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); this.zoomOut(); });
+                document.getElementById('zoomOutBtn').addEventListener('click', () => this.zoomOut());
+            }
+
+            updateZoomOverlay() {
+                const overlay = document.getElementById('zoomOverlay');
+                const wrapper = document.getElementById('canvasWrapper');
+                const canvasRect = this.canvas.getBoundingClientRect();
+                const wrapperRect = wrapper.getBoundingClientRect();
+                const scaleX = wrapperRect.width / this.canvas.width;
+                const scaleY = wrapperRect.height / this.canvas.height;
+                const x1 = Math.min(this.dragStart.x, this.dragCurrent.x) * scaleX;
+                const y1 = Math.min(this.dragStart.y, this.dragCurrent.y) * scaleY;
+                const x2 = Math.max(this.dragStart.x, this.dragCurrent.x) * scaleX;
+                const y2 = Math.max(this.dragStart.y, this.dragCurrent.y) * scaleY;
+                overlay.style.display = 'block';
+                overlay.style.left = x1 + 'px';
+                overlay.style.top = y1 + 'px';
+                overlay.style.width = (x2 - x1) + 'px';
+                overlay.style.height = (y2 - y1) + 'px';
+            }
+
+            applyZoomRectangle() {
+                const nx1 = Math.max(0, Math.min(1, Math.min(this.dragStart.x, this.dragCurrent.x) / this.canvas.width));
+                const nx2 = Math.max(0, Math.min(1, Math.max(this.dragStart.x, this.dragCurrent.x) / this.canvas.width));
+                const ny1 = Math.max(0, Math.min(1, 1 - Math.max(this.dragStart.y, this.dragCurrent.y) / this.canvas.height));
+                const ny2 = Math.max(0, Math.min(1, 1 - Math.min(this.dragStart.y, this.dragCurrent.y) / this.canvas.height));
+                const dataX1 = this.theta1Range[0] + nx1 * (this.theta1Range[1] - this.theta1Range[0]);
+                const dataX2 = this.theta1Range[0] + nx2 * (this.theta1Range[1] - this.theta1Range[0]);
+                const dataY1 = this.theta2Range[0] + ny1 * (this.theta2Range[1] - this.theta2Range[0]);
+                const dataY2 = this.theta2Range[0] + ny2 * (this.theta2Range[1] - this.theta2Range[0]);
+                this.zoomHistory.push({ theta1: [...this.theta1Range], theta2: [...this.theta2Range] });
+                this.theta1Range = [Math.min(dataX1, dataX2), Math.max(dataX1, dataX2)];
+                this.theta2Range = [Math.min(dataY1, dataY2), Math.max(dataY1, dataY2)];
+                this.updateRangeInputs();
+                this.updateZoomLevel();
+                this.reset();
+            }
+
+            zoomOut() {
+                if (this.zoomHistory.length > 0) {
+                    const prev = this.zoomHistory.pop();
+                    this.theta1Range = prev.theta1;
+                    this.theta2Range = prev.theta2;
+                } else {
+                    this.theta1Range = [-3.14, 3.14];
+                    this.theta2Range = [-3.14, 3.14];
+                }
+                this.updateRangeInputs();
+                this.updateZoomLevel();
+                this.reset();
+            }
+
+            updateRangeInputs() {
+                document.getElementById('theta1Min').value = this.theta1Range[0].toFixed(2);
+                document.getElementById('theta1Max').value = this.theta1Range[1].toFixed(2);
+                document.getElementById('theta2Min').value = this.theta2Range[0].toFixed(2);
+                document.getElementById('theta2Max').value = this.theta2Range[1].toFixed(2);
+            }
+
+            updateZoomLevel() {
+                document.getElementById('zoomLevel').textContent = this.zoomHistory.length + 1;
+            }
+
+            reset() {
+                const gl = this.gl;
+                this.frameCount = 0;
+                this.maxValue = 0;
+                this.readIndex = 0;
+                this.seed = Math.random() * 1000;
+                this.stopDivergence();
+                const res = this.resolution;
+
+                if (this.vizMode === 'distance') {
+                    gl.useProgram(this.programs.init);
+                    gl.bindVertexArray(this.vaos.init);
+                    gl.uniform2f(gl.getUniformLocation(this.programs.init, 'u_theta1Range'), this.theta1Range[0], this.theta1Range[1]);
+                    gl.uniform2f(gl.getUniformLocation(this.programs.init, 'u_theta2Range'), this.theta2Range[0], this.theta2Range[1]);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.init, 'u_omega1'), this.omega1);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.init, 'u_omega2'), this.omega2);
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.stateTextures[0], 0);
+                    gl.viewport(0, 0, res, res);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+                    gl.useProgram(this.programs.distance);
+                    gl.bindVertexArray(this.vaos.distance);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distance, 'u_stateTexture'), 0);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distance, 'u_distanceTexture'), 1);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distance, 'u_reset'), 1);
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.bindTexture(gl.TEXTURE_2D, this.stateTextures[0]);
+                    gl.activeTexture(gl.TEXTURE1);
+                    gl.bindTexture(gl.TEXTURE_2D, this.dataTextures[0]);
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[1]);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.dataTextures[1], 0);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    [this.dataTextures[0], this.dataTextures[1]] = [this.dataTextures[1], this.dataTextures[0]];
+                } else if (this.vizMode === 'divergence') {
+                    gl.useProgram(this.programs.initDivergence);
+                    gl.bindVertexArray(this.vaos.initDivergence);
+                    gl.uniform2f(gl.getUniformLocation(this.programs.initDivergence, 'u_theta1Range'), this.theta1Range[0], this.theta1Range[1]);
+                    gl.uniform2f(gl.getUniformLocation(this.programs.initDivergence, 'u_theta2Range'), this.theta2Range[0], this.theta2Range[1]);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.initDivergence, 'u_omega1'), this.omega1);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.initDivergence, 'u_omega2'), this.omega2);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.initDivergence, 'u_perturb'), this.perturb);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.initDivergence, 'u_seed'), this.seed);
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.stateTextures[0], 0);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, this.perturbedStateTextures[0], 0);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT2, gl.TEXTURE_2D, this.dataTextures[0], 0);
+                    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
+                    gl.viewport(0, 0, res, res);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    this.readIndex = 0;
+                    this.startDivergence();
+                }
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                gl.bindVertexArray(null);
+            }
+
+            startDivergence() {
+                this.stopDivergence();
+                this.divergenceInterval = setInterval(() => {
+                    if (this.frameCount >= this.maxIter) {
+                        this.stopDivergence();
+                        this.computeMaxValue();
+                        return;
+                    }
+                    const gl = this.gl;
+                    const res = this.resolution;
+                    const batchSize = 20;
+                    for (let i = 0; i < batchSize; i++) {
+                        if (this.frameCount >= this.maxIter) break;
+                        this.frameCount++;
+                        const readIdx = this.readIndex;
+                        const writeIdx = 1 - this.readIndex;
+                        gl.useProgram(this.programs.divergence);
+                        gl.bindVertexArray(this.vaos.divergence);
+                        gl.uniform1i(gl.getUniformLocation(this.programs.divergence, 'u_stateTexture'), 0);
+                        gl.uniform1i(gl.getUniformLocation(this.programs.divergence, 'u_perturbedTexture'), 1);
+                        gl.uniform1i(gl.getUniformLocation(this.programs.divergence, 'u_divergenceTexture'), 2);
+                        gl.uniform1f(gl.getUniformLocation(this.programs.divergence, 'u_dt'), this.dt);
+                        gl.uniform1f(gl.getUniformLocation(this.programs.divergence, 'u_threshold'), this.threshold);
+                        gl.uniform1i(gl.getUniformLocation(this.programs.divergence, 'u_currentIter'), this.frameCount);
+                        gl.activeTexture(gl.TEXTURE0);
+                        gl.bindTexture(gl.TEXTURE_2D, this.stateTextures[readIdx]);
+                        gl.activeTexture(gl.TEXTURE1);
+                        gl.bindTexture(gl.TEXTURE_2D, this.perturbedStateTextures[readIdx]);
+                        gl.activeTexture(gl.TEXTURE2);
+                        gl.bindTexture(gl.TEXTURE_2D, this.dataTextures[readIdx]);
+                        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
+                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.stateTextures[writeIdx], 0);
+                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, this.perturbedStateTextures[writeIdx], 0);
+                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT2, gl.TEXTURE_2D, this.dataTextures[writeIdx], 0);
+                        gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
+                        gl.viewport(0, 0, res, res);
+                        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                        this.readIndex = writeIdx;
+                    }
+                }, 20);
+                this.divergenceRenderInterval = setInterval(() => this.computeMaxValue(), 500);
+            }
+
+            stopDivergence() {
+                if (this.divergenceInterval) {
+                    clearInterval(this.divergenceInterval);
+                    this.divergenceInterval = null;
+                }
+                if (this.divergenceRenderInterval) {
+                    clearInterval(this.divergenceRenderInterval);
+                    this.divergenceRenderInterval = null;
+                }
+            }
+
+            step() {
+                if (this.vizMode === 'divergence') return;
+                const gl = this.gl;
+                const res = this.resolution;
+                for (let i = 0; i < this.iterationsPerFrame; i++) {
+                    const readIdx = this.readIndex;
+                    const writeIdx = 1 - this.readIndex;
+                    gl.useProgram(this.programs.physics);
+                    gl.bindVertexArray(this.vaos.physics);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.physics, 'u_stateTexture'), 0);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.physics, 'u_dt'), this.dt);
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.bindTexture(gl.TEXTURE_2D, this.stateTextures[readIdx]);
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.stateTextures[writeIdx], 0);
+                    gl.viewport(0, 0, res, res);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+                    gl.useProgram(this.programs.distance);
+                    gl.bindVertexArray(this.vaos.distance);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distance, 'u_stateTexture'), 0);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distance, 'u_distanceTexture'), 1);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distance, 'u_reset'), 0);
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.bindTexture(gl.TEXTURE_2D, this.stateTextures[writeIdx]);
+                    gl.activeTexture(gl.TEXTURE1);
+                    gl.bindTexture(gl.TEXTURE_2D, this.dataTextures[readIdx]);
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[1]);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.dataTextures[writeIdx], 0);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    this.readIndex = writeIdx;
+                }
+                this.frameCount += this.iterationsPerFrame;
+            }
+
+            render() {
+                const gl = this.gl;
+                if (this.vizMode === 'distance') {
+                    this.computeMaxValue();
+                }
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+                gl.useProgram(this.programs.render);
+                gl.bindVertexArray(this.vaos.render);
+                gl.uniform1i(gl.getUniformLocation(this.programs.render, 'u_dataTexture'), 0);
+                gl.uniform1i(gl.getUniformLocation(this.programs.render, 'u_colormap'), this.colormap);
+                gl.uniform1i(gl.getUniformLocation(this.programs.render, 'u_toneMapping'), this.toneMapping);
+                gl.uniform1f(gl.getUniformLocation(this.programs.render, 'u_maxValue'), this.maxValue || 1);
+                gl.uniform1i(gl.getUniformLocation(this.programs.render, 'u_isDivergenceMode'), this.vizMode === 'divergence' ? 1 : 0);
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, this.dataTextures[this.readIndex]);
+                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                gl.bindVertexArray(null);
+            }
+
+            computeMaxValue() {
+                const gl = this.gl;
+                const res = this.resolution;
+                const isDivergence = this.vizMode === 'divergence';
+                const tempFb = gl.createFramebuffer();
+                gl.bindFramebuffer(gl.FRAMEBUFFER, tempFb);
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.dataTextures[this.readIndex], 0);
+                const sampleSize = isDivergence ? res : Math.min(128, res);
+                const pixels = new Float32Array(sampleSize * sampleSize * 4);
+                gl.viewport(0, 0, sampleSize, sampleSize);
+                gl.readPixels(0, 0, sampleSize, sampleSize, gl.RGBA, gl.FLOAT, pixels);
+                let maxVal = 0;
+                const channel = isDivergence ? 0 : 2;
+                for (let i = 0; i < pixels.length; i += 4) {
+                    const val = pixels[i + channel];
+                    if (val > maxVal && isFinite(val)) maxVal = val;
+                }
+                this.maxValue = maxVal;
+                gl.deleteFramebuffer(tempFb);
+            }
+
+            updateStats() {
+                const now = performance.now();
+                if (this.vizMode === 'divergence' && this.frameCount >= this.maxIter) {
+                    this.fps = 0;
+                } else {
+                    this.fps = Math.round(1000 / (now - this.lastTime));
+                }
+                this.lastTime = now;
+                document.getElementById('frameCount').textContent = this.frameCount;
+                document.getElementById('maxDistance').textContent = this.maxValue.toFixed(2);
+                document.getElementById('fps').textContent = this.fps;
+            }
+
+            animate() {
+                this.step();
+                if (this.vizMode !== 'divergence' || this.frameCount < this.maxIter) {
+                    this.render();
+                }
+                this.updateStats();
+                requestAnimationFrame(() => this.animate());
+            }
         }
 
         class VideoRenderer {
@@ -1239,6 +1571,10 @@ void main() {
                 this.offscreen = document.createElement('canvas');
                 this.offscreen.width = res;
                 this.offscreen.height = res;
+                this.offscreen.style.position = 'fixed';
+                this.offscreen.style.left = '-9999px';
+                this.offscreen.style.top = '-9999px';
+                document.body.appendChild(this.offscreen);
                 this.gl = this.offscreen.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
                 if (!this.gl) { alert('WebGL 2.0 not available'); return; }
                 const gl = this.gl;
@@ -1261,45 +1597,53 @@ void main() {
                     rec.onstop = () => resolve(new Blob(chunks, { type: rec.mimeType }));
                 });
                 rec.start();
-                this._recorder = rec;
-                this._track = track;
 
                 for (let frame = 0; frame < totalFrames; frame++) {
                     if (this.cancelled) break;
                     this.stepDistance(p.itersPerFrame);
                     this.stepDivergence(p.itersPerFrame);
-                    if (frame % 5 === 0 || frame === totalFrames - 1) {
-                        this.renderCombinedFrame();
-                        if (this._track) this._track.requestFrame();
-                    }
-                    if (frame % 10 === 0) {
-                        const progress = (frame + 1) / totalFrames;
-                        this.renderer.setVisStatus(
-                            `Simulating frame ${frame + 1} / ${totalFrames} (${res}x${res})...`,
-                            progress * 0.9
-                        );
-                        await this.sleep(1);
-                    }
+
+                    const progress = (frame + 1) / totalFrames;
+                    this.renderer.setVisStatus(
+                        `Simulating frame ${frame + 1} / ${totalFrames} (${res}x${res})...`,
+                        progress * 0.85
+                    );
+                    await this.sleep(0);
                 }
 
                 if (this.cancelled) {
-                    if (this._recorder && this._recorder.state !== 'inactive') this._recorder.stop();
+                    if (rec.state !== 'inactive') rec.stop();
+                    document.body.removeChild(this.offscreen);
                     return;
                 }
 
-                this.renderer.setVisStatus('Computing dynamic range...', 0.92);
+                this.renderer.setVisStatus('Computing dynamic range...', 0.9);
                 await this.sleep(50);
 
                 const range = this.computeRanges(p.clipPercentile);
-                this.renderCombinedFrameFinal(range);
-                if (this._track) this._track.requestFrame();
+                const renderEvery = Math.max(1, Math.floor(totalFrames / 60));
+                let capturedFrames = 0;
 
-                this.renderer.setVisStatus('Encoding video...', 0.95);
+                for (let pass = 0; pass <= totalFrames; pass += renderEvery) {
+                    if (this.cancelled) break;
+                    const approxRange = this.computeQuickRange();
+                    this.renderCombinedFrameFinal(approxRange);
+                    await this.sleep(50);
+                    if (track.requestFrame) track.requestFrame();
+                    capturedFrames++;
+                    const prog = 0.9 + 0.08 * (pass / totalFrames);
+                    this.renderer.setVisStatus(`Rendering video frame ${capturedFrames}...`, prog);
+                    await this.sleep(0);
+                }
+
+                this.renderCombinedFrameFinal(range);
+                if (track.requestFrame) track.requestFrame();
+                capturedFrames++;
+
+                this.renderer.setVisStatus('Encoding video...', 0.98);
                 await this.sleep(50);
 
-                if (this._recorder && this._recorder.state !== 'inactive') {
-                    this._recorder.stop();
-                }
+                if (rec.state !== 'inactive') rec.stop();
                 const blob = await videoBlob;
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -1307,8 +1651,9 @@ void main() {
                 a.download = `chaos-combined-${res}x${res}.webm`;
                 a.click();
                 URL.revokeObjectURL(url);
+                document.body.removeChild(this.offscreen);
 
-                this.renderer.setVisStatus('Done!', 1.0);
+                this.renderer.setVisStatus('Done! Downloaded ' + capturedFrames + ' frames.', 1.0);
             }
 
             sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -1521,24 +1866,55 @@ void main() {
                 }
             }
 
-            computeRanges(clipPercentile) {
+            computeQuickRange() {
                 const gl = this.gl;
                 const res = this.params.resolution;
+                const sampleSize = Math.min(128, res);
 
                 const distFb = gl.createFramebuffer();
                 gl.bindFramebuffer(gl.FRAMEBUFFER, distFb);
                 gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.distDataTex[this.distReadIdx], 0);
-                const distPixels = new Float32Array(res * res * 4);
-                gl.readPixels(0, 0, res, res, gl.RGBA, gl.FLOAT, distPixels);
+                const distPixels = new Float32Array(sampleSize * sampleSize * 4);
+                gl.viewport(0, 0, sampleSize, sampleSize);
+                gl.readPixels(0, 0, sampleSize, sampleSize, gl.RGBA, gl.FLOAT, distPixels);
                 gl.deleteFramebuffer(distFb);
 
                 const divFb = gl.createFramebuffer();
                 gl.bindFramebuffer(gl.FRAMEBUFFER, divFb);
                 gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.divDataTex[this.divReadIdx], 0);
-                const divPixels = new Float32Array(res * res * 4);
-                gl.readPixels(0, 0, res, res, gl.RGBA, gl.FLOAT, divPixels);
+                const divPixels = new Float32Array(sampleSize * sampleSize * 4);
+                gl.viewport(0, 0, sampleSize, sampleSize);
+                gl.readPixels(0, 0, sampleSize, sampleSize, gl.RGBA, gl.FLOAT, divPixels);
                 gl.deleteFramebuffer(divFb);
 
+                return this.extractRanges(distPixels, divPixels, this.params.clipPercentile);
+            }
+
+            computeRanges(clipPercentile) {
+                const gl = this.gl;
+                const res = this.params.resolution;
+                const sampleSize = Math.min(128, res);
+
+                const distFb = gl.createFramebuffer();
+                gl.bindFramebuffer(gl.FRAMEBUFFER, distFb);
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.distDataTex[this.distReadIdx], 0);
+                const distPixels = new Float32Array(sampleSize * sampleSize * 4);
+                gl.viewport(0, 0, sampleSize, sampleSize);
+                gl.readPixels(0, 0, sampleSize, sampleSize, gl.RGBA, gl.FLOAT, distPixels);
+                gl.deleteFramebuffer(distFb);
+
+                const divFb = gl.createFramebuffer();
+                gl.bindFramebuffer(gl.FRAMEBUFFER, divFb);
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.divDataTex[this.divReadIdx], 0);
+                const divPixels = new Float32Array(sampleSize * sampleSize * 4);
+                gl.viewport(0, 0, sampleSize, sampleSize);
+                gl.readPixels(0, 0, sampleSize, sampleSize, gl.RGBA, gl.FLOAT, divPixels);
+                gl.deleteFramebuffer(divFb);
+
+                return this.extractRanges(distPixels, divPixels, clipPercentile);
+            }
+
+            extractRanges(distPixels, divPixels, clipPercentile) {
                 let maxDiv = 0;
                 for (let i = 0; i < divPixels.length; i += 4) {
                     if (divPixels[i] > maxDiv && isFinite(divPixels[i])) maxDiv = divPixels[i];
@@ -1550,35 +1926,9 @@ void main() {
                 }
                 distances.sort((a, b) => a - b);
                 const clipIdx = Math.floor(distances.length * clipPercentile);
-                const clipMax = clipIdx < distances.length ? distances[clipIdx] : distances[distances.length - 1];
-                const maxDist = clipMax > 0 ? clipMax : 1;
+                const clipMax = clipIdx < distances.length ? distances[clipIdx] : (distances.length > 0 ? distances[distances.length - 1] : 1);
 
-                return { maxDist, maxDiv: maxDiv > 0 ? maxDiv : 1 };
-            }
-
-            renderCombinedFrame() {
-                const gl = this.gl;
-                const res = this.params.resolution;
-                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-                gl.viewport(0, 0, res, res);
-                gl.clearColor(1, 1, 1, 1);
-                gl.clear(gl.COLOR_BUFFER_BIT);
-                gl.useProgram(this.programs.combinedRender);
-                gl.bindVertexArray(this.vaos.combinedRender);
-                gl.uniform1i(gl.getUniformLocation(this.programs.combinedRender, 'u_distanceTexture'), 0);
-                gl.uniform1i(gl.getUniformLocation(this.programs.combinedRender, 'u_divergenceTexture'), 1);
-                gl.uniform1i(gl.getUniformLocation(this.programs.combinedRender, 'u_distanceColormap'), this.params.distColormap);
-                gl.uniform1i(gl.getUniformLocation(this.programs.combinedRender, 'u_divergenceColormap'), this.params.divColormap);
-                gl.uniform1i(gl.getUniformLocation(this.programs.combinedRender, 'u_toneMapping'), this.params.toneMapping);
-                gl.uniform1f(gl.getUniformLocation(this.programs.combinedRender, 'u_maxDistance'), 1.0);
-                gl.uniform1f(gl.getUniformLocation(this.programs.combinedRender, 'u_maxDivergence'), 1.0);
-                gl.uniform1f(gl.getUniformLocation(this.programs.combinedRender, 'u_distanceClipMax'), 1.0);
-                gl.activeTexture(gl.TEXTURE0);
-                gl.bindTexture(gl.TEXTURE_2D, this.distDataTex[this.distReadIdx]);
-                gl.activeTexture(gl.TEXTURE1);
-                gl.bindTexture(gl.TEXTURE_2D, this.divDataTex[this.divReadIdx]);
-                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-                gl.bindVertexArray(null);
+                return { maxDist: clipMax > 0 ? clipMax : 1, maxDiv: maxDiv > 0 ? maxDiv : 1 };
             }
 
             renderCombinedFrameFinal(range) {
