@@ -599,161 +599,6 @@
             color: var(--text-bright);
         }
 
-        /* ========== Modal ========== */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(4, 6, 12, 0.9);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 100;
-            padding: var(--space-xl);
-        }
-
-        .modal-overlay.active {
-            display: flex;
-        }
-
-        .modal {
-            background: linear-gradient(180deg, rgba(16, 20, 32, 0.98) 0%, rgba(10, 13, 22, 0.98) 100%);
-            border: 1px solid var(--border-default);
-            border-radius: var(--radius-lg);
-            width: 100%;
-            max-width: 520px;
-            max-height: 88vh;
-            overflow-y: auto;
-            box-shadow: 0 24px 80px rgba(0,0,0,0.6);
-        }
-
-        .modal::-webkit-scrollbar {
-            width: 4px;
-        }
-        .modal::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .modal::-webkit-scrollbar-thumb {
-            background: var(--border-strong);
-            border-radius: 2px;
-        }
-
-        .modal-header {
-            padding: var(--space-xl) var(--space-xl) var(--space-md);
-            border-bottom: 1px solid var(--border-subtle);
-        }
-
-        .modal-header h2 {
-            font-size: 1.05rem;
-            font-weight: 600;
-            color: var(--text-bright);
-            letter-spacing: -0.01em;
-        }
-
-        .modal-body {
-            padding: var(--space-md) var(--space-xl);
-        }
-
-        .modal-section {
-            margin-bottom: var(--space-sm);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-md);
-            overflow: hidden;
-        }
-
-        .modal-section-title {
-            display: flex;
-            align-items: center;
-            gap: var(--space-sm);
-            padding: var(--space-sm) var(--space-md);
-            cursor: pointer;
-            font-size: 0.7rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--text-secondary);
-            background: var(--bg-elevated);
-            list-style: none;
-            user-select: none;
-            transition: color var(--transition-fast);
-        }
-
-        .modal-section-title::-webkit-details-marker {
-            display: none;
-        }
-
-        .modal-section-title::before {
-            content: '\25B8';
-            font-size: 0.65em;
-            transition: transform var(--transition-fast);
-            color: var(--text-muted);
-        }
-
-        .modal-section[open] > .modal-section-title::before {
-            transform: rotate(90deg);
-        }
-
-        .modal-section-title:hover {
-            color: var(--text-bright);
-        }
-
-        .modal-section-body {
-            padding: var(--space-md);
-            display: flex;
-            flex-direction: column;
-            gap: var(--space-md);
-        }
-
-        .modal-footer {
-            padding: var(--space-md) var(--space-xl) var(--space-xl);
-            border-top: 1px solid var(--border-subtle);
-            margin-top: var(--space-sm);
-        }
-
-        .modal-footer .button-row {
-            margin-bottom: var(--space-md);
-        }
-
-        /* ========== Progress Bar ========== */
-        .progress-bar {
-            width: 100%;
-            height: 4px;
-            background: var(--border-default);
-            border-radius: 2px;
-            overflow: hidden;
-            display: none;
-            margin-top: var(--space-sm);
-        }
-
-        .progress-bar.active {
-            display: block;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, var(--accent), var(--accent-blue));
-            width: 0%;
-            transition: width 0.2s ease;
-            border-radius: 2px;
-        }
-
-        .status-text {
-            font-size: 0.72rem;
-            color: var(--text-secondary);
-            margin-top: var(--space-sm);
-            text-align: center;
-            font-family: var(--font-mono);
-            display: none;
-        }
-
-        .status-text.active {
-            display: block;
-        }
-
         /* ========== Responsive ========== */
         @media (max-width: 900px) {
             .app-layout {
@@ -846,7 +691,17 @@
                 <summary class="section-title">Visualization</summary>
                 <div class="section-body">
                     <div class="control-group">
-                        <label for="vizMode">Mode</label>
+                        <label for="systemType">System</label>
+                        <select id="systemType">
+                            <option value="rigid">Rigid Double Pendulum</option>
+                            <option value="elastic1">Elastic Arm 1</option>
+                            <option value="elastic2">Elastic Arm 2</option>
+                            <option value="elastic12">Both Elastic</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="vizMode">Visualization</label>
                         <select id="vizMode">
                             <option value="distance">Bob2 Distance</option>
                             <option value="divergence">Divergence Time</option>
@@ -935,6 +790,17 @@
                         <input type="range" id="perturb" min="0.000001" max="0.001" step="0.000001" value="0.00001">
                     </div>
 
+                    <div id="elasticControls" style="display: none;">
+                        <div class="control-group">
+                            <label>Spring k₁ <span id="k1Value" class="value-display">50</span></label>
+                            <input type="range" id="k1" min="1" max="500" step="1" value="50">
+                        </div>
+                        <div class="control-group">
+                            <label>Spring k₂ <span id="k2Value" class="value-display">50</span></label>
+                            <input type="range" id="k2" min="1" max="500" step="1" value="50">
+                        </div>
+                    </div>
+
                     <div id="divergenceControls" style="display: none;">
                         <div class="control-group">
                             <label>Max Iterations</label>
@@ -962,7 +828,6 @@
                         <button type="button" class="btn btn-primary" id="resetBtn">Reset</button>
                     </div>
                     <button type="button" class="btn btn-secondary" id="downloadBtn">Download Image</button>
-                    <button type="button" class="btn btn-accent" id="createVisBtn">Create Visualization</button>
                 </div>
             </details>
 
@@ -991,116 +856,6 @@
             </details>
         </aside>
     </main>
-
-    <div class="modal-overlay" id="visModal">
-        <div class="modal">
-            <div class="modal-header">
-                <h2>Create Combined Visualization</h2>
-            </div>
-
-            <div class="modal-body">
-                <details class="modal-section" open>
-                    <summary class="modal-section-title">Simulation</summary>
-                    <div class="modal-section-body">
-                        <div class="control-group">
-                            <label for="visResolution">Resolution</label>
-                            <select id="visResolution">
-                                <option value="512">512 x 512</option>
-                                <option value="1024" selected>1024 x 1024</option>
-                                <option value="2048">2048 x 2048</option>
-                                <option value="4096">4096 x 4096</option>
-                            </select>
-                        </div>
-
-                        <div class="control-group">
-                            <label for="visMaxIter">Max Iterations (divergence)</label>
-                            <input type="number" id="visMaxIter" min="1" max="200000" value="10000">
-                        </div>
-
-                        <div class="control-group">
-                            <label for="visItersPerFrame">Iterations per Frame</label>
-                            <input type="number" id="visItersPerFrame" min="1" max="1000" value="10">
-                        </div>
-
-                        <div class="control-group">
-                            <label for="visDt">Time Step (dt)</label>
-                            <input type="number" id="visDt" step="0.0001" value="0.002">
-                        </div>
-                    </div>
-                </details>
-
-                <details class="modal-section" open>
-                    <summary class="modal-section-title">Divergence</summary>
-                    <div class="modal-section-body">
-                        <div class="control-group">
-                            <label for="visThreshold">Divergence Threshold</label>
-                            <input type="number" id="visThreshold" step="0.001" value="0.05">
-                        </div>
-
-                        <div class="control-group">
-                            <label for="visPerturb">Perturbation</label>
-                            <input type="number" id="visPerturb" step="0.000001" value="0.00001">
-                        </div>
-                    </div>
-                </details>
-
-                <details class="modal-section" open>
-                    <summary class="modal-section-title">Rendering</summary>
-                    <div class="modal-section-body">
-                        <div class="control-group">
-                            <label for="visClipPercentile">Distance Clip Percentile (%)</label>
-                            <input type="number" id="visClipPercentile" min="50" max="100" step="1" value="95">
-                        </div>
-
-                        <div class="control-group">
-                            <label for="visDivColormap">Divergence Colormap</label>
-                            <select id="visDivColormap">
-                                <option value="0">Viridis</option>
-                                <option value="1">Magma</option>
-                                <option value="2">Plasma</option>
-                                <option value="3">Inferno</option>
-                                <option value="4">Turbo</option>
-                                <option value="5">Jet</option>
-                                <option value="6" selected>Rainbow</option>
-                            </select>
-                        </div>
-
-                        <div class="control-group">
-                            <label for="visDistColormap">Distance Colormap</label>
-                            <select id="visDistColormap">
-                                <option value="0">Viridis</option>
-                                <option value="1">Magma</option>
-                                <option value="2">Plasma</option>
-                                <option value="3">Inferno</option>
-                                <option value="4">Turbo</option>
-                                <option value="5">Jet</option>
-                                <option value="6" selected>Rainbow</option>
-                            </select>
-                        </div>
-
-                        <div class="control-group">
-                            <label for="visToneMapping">Tone Mapping</label>
-                            <select id="visToneMapping">
-                                <option value="0" selected>Linear</option>
-                                <option value="1">Logarithmic</option>
-                                <option value="2">Square Root</option>
-                                <option value="3">S-Curve</option>
-                            </select>
-                        </div>
-                    </div>
-                </details>
-            </div>
-
-            <div class="modal-footer">
-                <div class="button-row">
-                    <button type="button" class="btn btn-secondary" id="visCancelBtn">Cancel</button>
-                    <button type="button" class="btn btn-accent" id="visStartBtn">Start Recording</button>
-                </div>
-                <div class="progress-bar" id="visProgress"><div class="progress-fill" id="visProgressFill"></div></div>
-                <div class="status-text" id="visStatus">Ready</div>
-            </div>
-        </div>
-    </div>
 
     <script id="vertex-shader" type="x-shader/x-vertex">
 #version 300 es
@@ -1329,139 +1084,6 @@ void main() {
 }
     </script>
 
-    <script id="combined-render-shader" type="x-shader/x-fragment">
-#version 300 es
-precision highp float;
-
-uniform sampler2D u_distanceTexture;
-uniform sampler2D u_divergenceTexture;
-uniform int u_distanceColormap;
-uniform int u_divergenceColormap;
-uniform int u_toneMapping;
-uniform float u_maxDistance;
-uniform float u_maxDivergence;
-uniform float u_distanceClipMax;
-
-in vec2 v_uv;
-out vec4 fragColor;
-
-vec3 viridis(float t) {
-    vec3 c0 = vec3(68.0/255.0, 1.0/255.0, 84.0/255.0);
-    vec3 c1 = vec3(33.0/255.0, 145.0/255.0, 140.0/255.0);
-    vec3 c2 = vec3(253.0/255.0, 231.0/255.0, 37.0/255.0);
-    if (t < 0.5) return mix(c0, c1, t * 2.0);
-    return mix(c1, c2, (t - 0.5) * 2.0);
-}
-
-vec3 magma(float t) {
-    vec3 c0 = vec3(4.0/255.0, 5.0/255.0, 9.0/255.0);
-    vec3 c1 = vec3(148.0/255.0, 52.0/255.0, 110.0/255.0);
-    vec3 c2 = vec3(252.0/255.0, 253.0/255.0, 191.0/255.0);
-    if (t < 0.5) return mix(c0, c1, t * 2.0);
-    return mix(c1, c2, (t - 0.5) * 2.0);
-}
-
-vec3 plasma(float t) {
-    vec3 c0 = vec3(13.0/255.0, 8.0/255.0, 135.0/255.0);
-    vec3 c1 = vec3(156.0/255.0, 23.0/255.0, 158.0/255.0);
-    vec3 c2 = vec3(240.0/255.0, 249.0/255.0, 33.0/255.0);
-    if (t < 0.5) return mix(c0, c1, t * 2.0);
-    return mix(c1, c2, (t - 0.5) * 2.0);
-}
-
-vec3 inferno(float t) {
-    vec3 c0 = vec3(0.0/255.0, 0.0/255.0, 4.0/255.0);
-    vec3 c1 = vec3(187.0/255.0, 55.0/255.0, 84.0/255.0);
-    vec3 c2 = vec3(252.0/255.0, 255.0/255.0, 164.0/255.0);
-    if (t < 0.5) return mix(c0, c1, t * 2.0);
-    return mix(c1, c2, (t - 0.5) * 2.0);
-}
-
-vec3 turbo(float t) {
-    float r = clamp((48.0 + 227.0 * sin((t - 0.5) * 3.14159265)) / 255.0, 0.0, 1.0);
-    float g = clamp((t < 0.5 ? t * 400.0 : (1.0 - t) * 400.0) / 255.0, 0.0, 1.0);
-    float b = clamp((128.0 + 127.0 * cos(t * 3.14159265)) / 255.0, 0.0, 1.0);
-    return vec3(r, g, b);
-}
-
-vec3 jet(float t) {
-    float r = clamp(t < 0.5 ? 0.0 : (t - 0.5) * 2.0, 0.0, 1.0);
-    float g = clamp(t < 0.25 ? t * 4.0 : t < 0.75 ? 1.0 : (1.0 - t) * 4.0, 0.0, 1.0);
-    float b = clamp(t < 0.5 ? (0.5 - t) * 2.0 : 0.0, 0.0, 1.0);
-    return vec3(r, g, b);
-}
-
-vec3 rainbow(float t) {
-    float hue = (1.0 - t) * 0.85;
-    float s = 1.0, v = 1.0;
-    float c = v * s;
-    float x = c * (1.0 - abs(mod(hue * 6.0, 2.0) - 1.0));
-    float m = v - c;
-    vec3 rgb;
-    if (hue < 1.0/6.0) rgb = vec3(c, x, 0.0);
-    else if (hue < 2.0/6.0) rgb = vec3(x, c, 0.0);
-    else if (hue < 3.0/6.0) rgb = vec3(0.0, c, x);
-    else if (hue < 4.0/6.0) rgb = vec3(0.0, x, c);
-    else if (hue < 5.0/6.0) rgb = vec3(x, 0.0, c);
-    else rgb = vec3(c, 0.0, x);
-    return rgb + m;
-}
-
-vec3 applyColormap(float t, int mode) {
-    if (mode == 0) return viridis(t);
-    else if (mode == 1) return magma(t);
-    else if (mode == 2) return plasma(t);
-    else if (mode == 3) return inferno(t);
-    else if (mode == 4) return turbo(t);
-    else if (mode == 5) return jet(t);
-    else return rainbow(t);
-}
-
-void main() {
-    vec4 distData = texture(u_distanceTexture, v_uv);
-    vec4 divData = texture(u_divergenceTexture, v_uv);
-    
-    float divergence = divData.r;
-    float distance = distData.z;
-    
-    distance = min(distance, u_distanceClipMax);
-    
-    if (divergence > 0.0) {
-        float t;
-        if (u_toneMapping == 0) {
-            t = divergence / u_maxDivergence;
-        } else if (u_toneMapping == 1) {
-            t = log(1.0 + divergence) / log(1.0 + u_maxDivergence);
-        } else if (u_toneMapping == 2) {
-            t = sqrt(divergence / u_maxDivergence);
-        } else {
-            float x = divergence / u_maxDivergence;
-            t = x * x * (3.0 - 2.0 * x);
-        }
-        t = clamp(t, 0.0, 1.0);
-        vec3 color = applyColormap(1.0 - t, u_divergenceColormap);
-        fragColor = vec4(color, 1.0);
-    } else if (distData.w > 0.5) {
-        float t;
-        if (u_toneMapping == 0) {
-            t = distance / u_maxDistance;
-        } else if (u_toneMapping == 1) {
-            t = log(1.0 + distance) / log(1.0 + u_maxDistance);
-        } else if (u_toneMapping == 2) {
-            t = sqrt(distance / u_maxDistance);
-        } else {
-            float x = distance / u_maxDistance;
-            t = x * x * (3.0 - 2.0 * x);
-        }
-        t = clamp(t, 0.0, 1.0);
-        vec3 color = applyColormap(1.0 - t, u_distanceColormap);
-        fragColor = vec4(color, 1.0);
-    } else {
-        fragColor = vec4(1.0, 1.0, 1.0, 1.0);
-    }
-}
-    </script>
-
     <script id="init-divergence-shader" type="x-shader/x-fragment">
 #version 300 es
 precision highp float;
@@ -1564,6 +1186,656 @@ void main() {
 }
     </script>
 
+    <script id="init-elastic-shader" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+uniform vec2 u_theta1Range;
+uniform vec2 u_theta2Range;
+uniform float u_omega1;
+uniform float u_omega2;
+uniform int u_elasticMode;
+in vec2 v_uv;
+layout(location = 0) out vec4 stateA;
+layout(location = 1) out vec4 stateB;
+void main() {
+    float theta1 = mix(u_theta1Range.x, u_theta1Range.y, v_uv.x);
+    float theta2 = mix(u_theta2Range.x, u_theta2Range.y, v_uv.y);
+    if (u_elasticMode == 0) {
+        stateA = vec4(theta1, u_omega1, 0.0, 0.0);
+        stateB = vec4(theta2, u_omega2, 0.0, 1.0);
+    } else if (u_elasticMode == 1) {
+        stateA = vec4(theta1, u_omega1, theta2, u_omega2);
+        stateB = vec4(0.0, 0.0, 0.0, 1.0);
+    } else {
+        stateA = vec4(theta1, u_omega1, 0.0, 0.0);
+        stateB = vec4(theta2, u_omega2, 0.0, 0.0);
+    }
+}
+    </script>
+
+    <script id="physics-elastic-shader" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+uniform sampler2D u_stateTextureA;
+uniform sampler2D u_stateTextureB;
+uniform float u_dt;
+uniform int u_elasticMode;
+uniform float u_k1;
+uniform float u_k2;
+in vec2 v_uv;
+layout(location = 0) out vec4 outStateA;
+layout(location = 1) out vec4 outStateB;
+
+const float M1 = 1.0;
+const float M2 = 1.0;
+const float G  = 9.81;
+const float TOTAL_M = M1 + M2;
+const float L10 = 1.0;
+const float L20 = 1.0;
+
+vec3 solveCramer3(mat3 M, vec3 f) {
+    float det = M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1])
+              - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0])
+              + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+    float invDet = 1.0 / det;
+    float x0 = f.x   * (M[1][1] * M[2][2] - M[1][2] * M[2][1])
+              - M[0][1] * (f.y   * M[2][2] - M[1][2] * f.z)
+              + M[0][2] * (f.y   * M[2][1] - M[1][1] * f.z);
+    float x1 = M[0][0] * (f.y   * M[2][2] - M[1][2] * f.z)
+              - f.x     * (M[1][0] * M[2][2] - M[1][2] * M[2][0])
+              + M[0][2] * (M[1][0] * f.z   - f.y     * M[2][0]);
+    float x2 = M[0][0] * (M[1][1] * f.z   - f.y     * M[2][1])
+              - M[0][1] * (M[1][0] * f.z   - f.y     * M[2][0])
+              + f.x     * (M[1][1] * M[2][0] - M[1][0] * M[2][1]);
+    return vec3(x0, x1, x2) * invDet;
+}
+
+void systemDerivA(
+    float theta1, float omega1, float r1, float rdot1,
+    float theta2, float omega2,
+    out vec4 da, out vec4 db
+) {
+    float l1 = L10 + r1;
+    float delta = theta1 - theta2;
+    float sinD = sin(delta);
+    float cosD = cos(delta);
+    float l1sq = l1 * l1;
+    float L2sq = L20 * L20;
+    float w1sq = omega1 * omega1;
+    float w2sq = omega2 * omega2;
+
+    mat3 M;
+    M[0][0] = TOTAL_M * l1sq;  M[0][1] = 0.0;                    M[0][2] = M2 * L20 * l1 * cosD;
+    M[1][0] = 0.0;              M[1][1] = TOTAL_M;                M[1][2] = M2 * L20 * sinD;
+    M[2][0] = M2 * L20 * l1 * cosD; M[2][1] = M2 * L20 * sinD;  M[2][2] = M2 * L2sq;
+
+    vec3 f;
+    f.x = -2.0 * TOTAL_M * l1 * rdot1 * omega1
+          - M2 * L20 * l1 * w2sq * sinD
+          - TOTAL_M * G * l1 * sin(theta1);
+    f.y = TOTAL_M * l1 * w1sq
+          + M2 * L20 * w2sq * cosD
+          + TOTAL_M * G * cos(theta1)
+          - u_k1 * r1;
+    f.z = -2.0 * M2 * L20 * rdot1 * omega1 * cosD
+          + M2 * L20 * l1 * w1sq * sinD
+          - M2 * G * L20 * sin(theta2);
+
+    vec3 accel = solveCramer3(M, f);
+    da = vec4(omega1, accel.x, rdot1, accel.y);
+    db = vec4(omega2, accel.z, 0.0, 0.0);
+}
+
+void systemDerivB(
+    float theta1, float omega1,
+    float theta2, float omega2, float r2, float rdot2,
+    out vec4 da, out vec4 db
+) {
+    float l2 = L20 + r2;
+    float delta = theta1 - theta2;
+    float sinD = sin(delta);
+    float cosD = cos(delta);
+    float L1sq = L10 * L10;
+    float l2sq = l2 * l2;
+    float w1sq = omega1 * omega1;
+    float w2sq = omega2 * omega2;
+
+    mat3 M;
+    M[0][0] = TOTAL_M * L1sq;      M[0][1] = M2 * L10 * l2 * cosD; M[0][2] = -M2 * L10 * sinD;
+    M[1][0] = M2 * L10 * l2 * cosD; M[1][1] = M2 * l2sq;            M[1][2] = 0.0;
+    M[2][0] = -M2 * L10 * sinD;    M[2][1] = 0.0;                   M[2][2] = M2;
+
+    vec3 f;
+    f.x = -2.0 * M2 * L10 * rdot2 * omega2 * cosD
+          - M2 * L10 * l2 * w2sq * sinD
+          - TOTAL_M * G * L10 * sin(theta1);
+    f.y = -2.0 * M2 * l2 * rdot2 * omega2
+          + M2 * L10 * l2 * w1sq * sinD
+          - M2 * G * l2 * sin(theta2);
+    f.z = M2 * l2 * w2sq
+          + M2 * L10 * w1sq * cosD
+          + M2 * G * cos(theta2)
+          - u_k2 * r2;
+
+    vec3 accel = solveCramer3(M, f);
+    da = vec4(omega1, accel.x, 0.0, 0.0);
+    db = vec4(omega2, accel.y, rdot2, accel.z);
+}
+
+float det4(mat4 M) {
+    float d00 = M[1][1]*(M[2][2]*M[3][3] - M[2][3]*M[3][2])
+              - M[1][2]*(M[2][1]*M[3][3] - M[2][3]*M[3][1])
+              + M[1][3]*(M[2][1]*M[3][2] - M[2][2]*M[3][1]);
+    float d01 = M[1][0]*(M[2][2]*M[3][3] - M[2][3]*M[3][2])
+              - M[1][2]*(M[2][0]*M[3][3] - M[2][3]*M[3][0])
+              + M[1][3]*(M[2][0]*M[3][2] - M[2][2]*M[3][0]);
+    float d02 = M[1][0]*(M[2][1]*M[3][3] - M[2][3]*M[3][1])
+              - M[1][1]*(M[2][0]*M[3][3] - M[2][3]*M[3][0])
+              + M[1][3]*(M[2][0]*M[3][1] - M[2][1]*M[3][0]);
+    float d03 = M[1][0]*(M[2][1]*M[3][2] - M[2][2]*M[3][1])
+              - M[1][1]*(M[2][0]*M[3][2] - M[2][2]*M[3][0])
+              + M[1][2]*(M[2][0]*M[3][1] - M[2][1]*M[3][0]);
+    return M[0][0]*d00 - M[0][1]*d01 + M[0][2]*d02 - M[0][3]*d03;
+}
+
+vec4 solveCramer4(mat4 M, vec4 f) {
+    float det = det4(M);
+    float invDet = 1.0 / det;
+    mat4 M0 = M; M0[0][0] = f.x; M0[1][0] = f.y; M0[2][0] = f.z; M0[3][0] = f.w;
+    mat4 M1 = M; M1[0][1] = f.x; M1[1][1] = f.y; M1[2][1] = f.z; M1[3][1] = f.w;
+    mat4 M2m = M; M2m[0][2] = f.x; M2m[1][2] = f.y; M2m[2][2] = f.z; M2m[3][2] = f.w;
+    mat4 M3 = M; M3[0][3] = f.x; M3[1][3] = f.y; M3[2][3] = f.z; M3[3][3] = f.w;
+    return vec4(det4(M0), det4(M1), det4(M2m), det4(M3)) * invDet;
+}
+
+void systemDerivC(
+    float theta1, float omega1, float r1, float rdot1,
+    float theta2, float omega2, float r2, float rdot2,
+    out vec4 da, out vec4 db
+) {
+    float l1 = L10 + r1;
+    float l2 = L20 + r2;
+    float delta = theta1 - theta2;
+    float sinD = sin(delta);
+    float cosD = cos(delta);
+    float l1sq = l1 * l1;
+    float l2sq = l2 * l2;
+    float w1sq = omega1 * omega1;
+    float w2sq = omega2 * omega2;
+
+    mat4 M;
+    M[0][0] = TOTAL_M * l1sq; M[0][1] = 0.0;               M[0][2] = M2 * l1 * l2 * cosD; M[0][3] = -M2 * l1 * sinD;
+    M[1][0] = 0.0;            M[1][1] = TOTAL_M;            M[1][2] = M2 * l2 * sinD;      M[1][3] = M2 * cosD;
+    M[2][0] = M2*l1*l2*cosD;  M[2][1] = M2 * l2 * sinD;    M[2][2] = M2 * l2sq;            M[2][3] = 0.0;
+    M[3][0] = -M2 * l1*sinD;  M[3][1] = M2 * cosD;         M[3][2] = 0.0;                  M[3][3] = M2;
+
+    vec4 f;
+    f.x = -2.0 * TOTAL_M * l1 * rdot1 * omega1
+          - 2.0 * M2 * l1 * rdot2 * omega2 * cosD
+          - M2 * l1 * l2 * w2sq * sinD
+          - TOTAL_M * G * l1 * sin(theta1);
+    f.y = TOTAL_M * l1 * w1sq
+          + M2 * l2 * w2sq * cosD
+          - 2.0 * M2 * rdot2 * omega2 * sinD
+          + TOTAL_M * G * cos(theta1)
+          - u_k1 * r1;
+    f.z = -2.0 * M2 * l2 * rdot1 * omega1 * cosD
+          - 2.0 * M2 * l2 * rdot2 * omega2
+          + M2 * l1 * l2 * w1sq * sinD
+          - M2 * G * l2 * sin(theta2);
+    f.w = 2.0 * M2 * rdot1 * omega1 * sinD
+          + M2 * l1 * w1sq * cosD
+          + M2 * l2 * w2sq
+          + M2 * G * cos(theta2)
+          - u_k2 * r2;
+
+    vec4 accel = solveCramer4(M, f);
+    da = vec4(omega1, accel.x, rdot1, accel.y);
+    db = vec4(omega2, accel.z, rdot2, accel.w);
+}
+
+void elasticDeriv(int mode, vec4 sa, vec4 sb, out vec4 da, out vec4 db) {
+    if (mode == 0) {
+        systemDerivA(sa.x, sa.y, sa.z, sa.w, sb.x, sb.y, da, db);
+    } else if (mode == 1) {
+        systemDerivB(sa.x, sa.y, sb.x, sb.y, sb.z, sb.w, da, db);
+    } else {
+        systemDerivC(sa.x, sa.y, sa.z, sa.w, sb.x, sb.y, sb.z, sb.w, da, db);
+    }
+}
+
+void main() {
+    vec4 sa = texture(u_stateTextureA, v_uv);
+    vec4 sb = texture(u_stateTextureB, v_uv);
+
+    vec4 ca, cb;
+    if (u_elasticMode == 0) {
+        ca = sa;
+        cb = vec4(sb.x, sb.y, 0.0, 0.0);
+    } else if (u_elasticMode == 1) {
+        ca = vec4(sa.x, sa.y, 0.0, 0.0);
+        cb = vec4(sa.z, sa.w, sb.x, sb.y);
+    } else {
+        ca = sa;
+        cb = sb;
+    }
+
+    float dt = u_dt;
+    vec4 da1, db1, da2, db2, da3, db3, da4, db4;
+    elasticDeriv(u_elasticMode, ca, cb, da1, db1);
+    elasticDeriv(u_elasticMode, ca + 0.5*dt*da1, cb + 0.5*dt*db1, da2, db2);
+    elasticDeriv(u_elasticMode, ca + 0.5*dt*da2, cb + 0.5*dt*db2, da3, db3);
+    elasticDeriv(u_elasticMode, ca + dt*da3, cb + dt*db3, da4, db4);
+
+    vec4 newCA = ca + (dt / 6.0) * (da1 + 2.0*da2 + 2.0*da3 + da4);
+    vec4 newCB = cb + (dt / 6.0) * (db1 + 2.0*db2 + 2.0*db3 + db4);
+
+    if (u_elasticMode == 0) {
+        outStateA = newCA;
+        outStateB = vec4(newCB.x, newCB.y, 0.0, 1.0);
+    } else if (u_elasticMode == 1) {
+        outStateA = vec4(newCA.x, newCA.y, newCB.x, newCB.y);
+        outStateB = vec4(newCB.z, newCB.w, 0.0, 1.0);
+    } else {
+        outStateA = newCA;
+        outStateB = newCB;
+    }
+}
+    </script>
+
+    <script id="distance-elastic-shader" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+uniform sampler2D u_stateTextureA;
+uniform sampler2D u_stateTextureB;
+uniform sampler2D u_distanceTexture;
+uniform bool u_reset;
+uniform int u_elasticMode;
+in vec2 v_uv;
+out vec4 fragColor;
+void main() {
+    vec4 sa = texture(u_stateTextureA, v_uv);
+    vec4 sb = texture(u_stateTextureB, v_uv);
+
+    float theta1, theta2, r1, r2;
+    if (u_elasticMode == 0) {
+        theta1 = sa.x; theta2 = sb.x;
+        r1 = sa.z; r2 = 0.0;
+    } else if (u_elasticMode == 1) {
+        theta1 = sa.x; theta2 = sa.z;
+        r1 = 0.0; r2 = sb.x;
+    } else {
+        theta1 = sa.x; theta2 = sb.x;
+        r1 = sa.z; r2 = sb.z;
+    }
+
+    float l1 = 1.0 + r1;
+    float l2 = 1.0 + r2;
+    float x1 = l1 * sin(theta1);
+    float y1 = -l1 * cos(theta1);
+    float x2 = x1 + l2 * sin(theta2);
+    float y2 = y1 - l2 * cos(theta2);
+
+    vec4 prevData = texture(u_distanceTexture, v_uv);
+    float totalDist = prevData.z;
+    float valid = prevData.w;
+
+    float newDist = (u_reset || valid < 0.5) ? 0.0 : totalDist + sqrt((x2-prevData.x)*(x2-prevData.x) + (y2-prevData.y)*(y2-prevData.y));
+    fragColor = vec4(x2, y2, newDist, 1.0);
+}
+    </script>
+
+    <script id="init-elastic-divergence-shader" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+uniform vec2 u_theta1Range;
+uniform vec2 u_theta2Range;
+uniform float u_omega1;
+uniform float u_omega2;
+uniform int u_elasticMode;
+uniform float u_perturb;
+uniform float u_seed;
+in vec2 v_uv;
+layout(location = 0) out vec4 baseA;
+layout(location = 1) out vec4 baseB;
+layout(location = 2) out vec4 pertAOut;
+layout(location = 3) out vec4 pertBOut;
+layout(location = 4) out vec4 divergenceData;
+
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+void main() {
+    float theta1 = mix(u_theta1Range.x, u_theta1Range.y, v_uv.x);
+    float theta2 = mix(u_theta2Range.x, u_theta2Range.y, v_uv.y);
+    float r = hash(v_uv * 1000.0 + u_seed);
+    float perturb_theta1 = (r - 0.5) * 2.0 * u_perturb;
+    float perturb_theta2 = (hash(v_uv * 1000.0 + vec2(100.0, u_seed)) - 0.5) * 2.0 * u_perturb;
+    float pt1 = theta1 + perturb_theta1;
+    float pt2 = theta2 + perturb_theta2;
+
+    if (u_elasticMode == 0) {
+        baseA = vec4(theta1, u_omega1, 0.0, 0.0);
+        baseB = vec4(theta2, u_omega2, 0.0, 1.0);
+        pertAOut = vec4(pt1, u_omega1, 0.0, 0.0);
+        pertBOut = vec4(pt2, u_omega2, 0.0, 1.0);
+    } else if (u_elasticMode == 1) {
+        baseA = vec4(theta1, u_omega1, theta2, u_omega2);
+        baseB = vec4(0.0, 0.0, 0.0, 1.0);
+        pertAOut = vec4(pt1, u_omega1, pt2, u_omega2);
+        pertBOut = vec4(0.0, 0.0, 0.0, 1.0);
+    } else {
+        baseA = vec4(theta1, u_omega1, 0.0, 0.0);
+        baseB = vec4(theta2, u_omega2, 0.0, 0.0);
+        pertAOut = vec4(pt1, u_omega1, 0.0, 0.0);
+        pertBOut = vec4(pt2, u_omega2, 0.0, 0.0);
+    }
+
+    divergenceData = vec4(0.0, 0.0, 0.0, 1.0);
+}
+    </script>
+
+    <script id="divergence-elastic-shader" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+uniform sampler2D u_baseTextureA;
+uniform sampler2D u_baseTextureB;
+uniform sampler2D u_pertTextureA;
+uniform sampler2D u_pertTextureB;
+uniform sampler2D u_divergenceTexture;
+uniform float u_dt;
+uniform float u_threshold;
+uniform int u_currentIter;
+uniform int u_elasticMode;
+uniform float u_k1;
+uniform float u_k2;
+in vec2 v_uv;
+layout(location = 0) out vec4 outBaseA;
+layout(location = 1) out vec4 outBaseB;
+layout(location = 2) out vec4 outPertA;
+layout(location = 3) out vec4 outPertB;
+layout(location = 4) out vec4 divergenceData;
+
+const float M1 = 1.0;
+const float M2 = 1.0;
+const float G  = 9.81;
+const float TOTAL_M = M1 + M2;
+const float L10 = 1.0;
+const float L20 = 1.0;
+const float PI = 3.14159265359;
+
+vec3 solveCramer3(mat3 M, vec3 f) {
+    float det = M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1])
+              - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0])
+              + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+    float invDet = 1.0 / det;
+    float x0 = f.x   * (M[1][1] * M[2][2] - M[1][2] * M[2][1])
+              - M[0][1] * (f.y   * M[2][2] - M[1][2] * f.z)
+              + M[0][2] * (f.y   * M[2][1] - M[1][1] * f.z);
+    float x1 = M[0][0] * (f.y   * M[2][2] - M[1][2] * f.z)
+              - f.x     * (M[1][0] * M[2][2] - M[1][2] * M[2][0])
+              + M[0][2] * (M[1][0] * f.z   - f.y     * M[2][0]);
+    float x2 = M[0][0] * (M[1][1] * f.z   - f.y     * M[2][1])
+              - M[0][1] * (M[1][0] * f.z   - f.y     * M[2][0])
+              + f.x     * (M[1][1] * M[2][0] - M[1][0] * M[2][1]);
+    return vec3(x0, x1, x2) * invDet;
+}
+
+void systemDerivA(
+    float theta1, float omega1, float r1, float rdot1,
+    float theta2, float omega2,
+    out vec4 da, out vec4 db
+) {
+    float l1 = L10 + r1;
+    float delta = theta1 - theta2;
+    float sinD = sin(delta);
+    float cosD = cos(delta);
+    float l1sq = l1 * l1;
+    float L2sq = L20 * L20;
+    float w1sq = omega1 * omega1;
+    float w2sq = omega2 * omega2;
+
+    mat3 M;
+    M[0][0] = TOTAL_M * l1sq;  M[0][1] = 0.0;                    M[0][2] = M2 * L20 * l1 * cosD;
+    M[1][0] = 0.0;              M[1][1] = TOTAL_M;                M[1][2] = M2 * L20 * sinD;
+    M[2][0] = M2 * L20 * l1 * cosD; M[2][1] = M2 * L20 * sinD;  M[2][2] = M2 * L2sq;
+
+    vec3 f;
+    f.x = -2.0 * TOTAL_M * l1 * rdot1 * omega1
+          - M2 * L20 * l1 * w2sq * sinD
+          - TOTAL_M * G * l1 * sin(theta1);
+    f.y = TOTAL_M * l1 * w1sq
+          + M2 * L20 * w2sq * cosD
+          + TOTAL_M * G * cos(theta1)
+          - u_k1 * r1;
+    f.z = -2.0 * M2 * L20 * rdot1 * omega1 * cosD
+          + M2 * L20 * l1 * w1sq * sinD
+          - M2 * G * L20 * sin(theta2);
+
+    vec3 accel = solveCramer3(M, f);
+    da = vec4(omega1, accel.x, rdot1, accel.y);
+    db = vec4(omega2, accel.z, 0.0, 0.0);
+}
+
+void systemDerivB(
+    float theta1, float omega1,
+    float theta2, float omega2, float r2, float rdot2,
+    out vec4 da, out vec4 db
+) {
+    float l2 = L20 + r2;
+    float delta = theta1 - theta2;
+    float sinD = sin(delta);
+    float cosD = cos(delta);
+    float L1sq = L10 * L10;
+    float l2sq = l2 * l2;
+    float w1sq = omega1 * omega1;
+    float w2sq = omega2 * omega2;
+
+    mat3 M;
+    M[0][0] = TOTAL_M * L1sq;      M[0][1] = M2 * L10 * l2 * cosD; M[0][2] = -M2 * L10 * sinD;
+    M[1][0] = M2 * L10 * l2 * cosD; M[1][1] = M2 * l2sq;            M[1][2] = 0.0;
+    M[2][0] = -M2 * L10 * sinD;    M[2][1] = 0.0;                   M[2][2] = M2;
+
+    vec3 f;
+    f.x = -2.0 * M2 * L10 * rdot2 * omega2 * cosD
+          - M2 * L10 * l2 * w2sq * sinD
+          - TOTAL_M * G * L10 * sin(theta1);
+    f.y = -2.0 * M2 * l2 * rdot2 * omega2
+          + M2 * L10 * l2 * w1sq * sinD
+          - M2 * G * l2 * sin(theta2);
+    f.z = M2 * l2 * w2sq
+          + M2 * L10 * w1sq * cosD
+          + M2 * G * cos(theta2)
+          - u_k2 * r2;
+
+    vec3 accel = solveCramer3(M, f);
+    da = vec4(omega1, accel.x, 0.0, 0.0);
+    db = vec4(omega2, accel.y, rdot2, accel.z);
+}
+
+float det4(mat4 M) {
+    float d00 = M[1][1]*(M[2][2]*M[3][3] - M[2][3]*M[3][2])
+              - M[1][2]*(M[2][1]*M[3][3] - M[2][3]*M[3][1])
+              + M[1][3]*(M[2][1]*M[3][2] - M[2][2]*M[3][1]);
+    float d01 = M[1][0]*(M[2][2]*M[3][3] - M[2][3]*M[3][2])
+              - M[1][2]*(M[2][0]*M[3][3] - M[2][3]*M[3][0])
+              + M[1][3]*(M[2][0]*M[3][2] - M[2][2]*M[3][0]);
+    float d02 = M[1][0]*(M[2][1]*M[3][3] - M[2][3]*M[3][1])
+              - M[1][1]*(M[2][0]*M[3][3] - M[2][3]*M[3][0])
+              + M[1][3]*(M[2][0]*M[3][1] - M[2][1]*M[3][0]);
+    float d03 = M[1][0]*(M[2][1]*M[3][2] - M[2][2]*M[3][1])
+              - M[1][1]*(M[2][0]*M[3][2] - M[2][2]*M[3][0])
+              + M[1][2]*(M[2][0]*M[3][1] - M[2][1]*M[3][0]);
+    return M[0][0]*d00 - M[0][1]*d01 + M[0][2]*d02 - M[0][3]*d03;
+}
+
+vec4 solveCramer4(mat4 M, vec4 f) {
+    float det = det4(M);
+    float invDet = 1.0 / det;
+    mat4 M0 = M; M0[0][0] = f.x; M0[1][0] = f.y; M0[2][0] = f.z; M0[3][0] = f.w;
+    mat4 M1 = M; M1[0][1] = f.x; M1[1][1] = f.y; M1[2][1] = f.z; M1[3][1] = f.w;
+    mat4 M2m = M; M2m[0][2] = f.x; M2m[1][2] = f.y; M2m[2][2] = f.z; M2m[3][2] = f.w;
+    mat4 M3 = M; M3[0][3] = f.x; M3[1][3] = f.y; M3[2][3] = f.z; M3[3][3] = f.w;
+    return vec4(det4(M0), det4(M1), det4(M2m), det4(M3)) * invDet;
+}
+
+void systemDerivC(
+    float theta1, float omega1, float r1, float rdot1,
+    float theta2, float omega2, float r2, float rdot2,
+    out vec4 da, out vec4 db
+) {
+    float l1 = L10 + r1;
+    float l2 = L20 + r2;
+    float delta = theta1 - theta2;
+    float sinD = sin(delta);
+    float cosD = cos(delta);
+    float l1sq = l1 * l1;
+    float l2sq = l2 * l2;
+    float w1sq = omega1 * omega1;
+    float w2sq = omega2 * omega2;
+
+    mat4 M;
+    M[0][0] = TOTAL_M * l1sq; M[0][1] = 0.0;               M[0][2] = M2 * l1 * l2 * cosD; M[0][3] = -M2 * l1 * sinD;
+    M[1][0] = 0.0;            M[1][1] = TOTAL_M;            M[1][2] = M2 * l2 * sinD;      M[1][3] = M2 * cosD;
+    M[2][0] = M2*l1*l2*cosD;  M[2][1] = M2 * l2 * sinD;    M[2][2] = M2 * l2sq;            M[2][3] = 0.0;
+    M[3][0] = -M2 * l1*sinD;  M[3][1] = M2 * cosD;         M[3][2] = 0.0;                  M[3][3] = M2;
+
+    vec4 f;
+    f.x = -2.0 * TOTAL_M * l1 * rdot1 * omega1
+          - 2.0 * M2 * l1 * rdot2 * omega2 * cosD
+          - M2 * l1 * l2 * w2sq * sinD
+          - TOTAL_M * G * l1 * sin(theta1);
+    f.y = TOTAL_M * l1 * w1sq
+          + M2 * l2 * w2sq * cosD
+          - 2.0 * M2 * rdot2 * omega2 * sinD
+          + TOTAL_M * G * cos(theta1)
+          - u_k1 * r1;
+    f.z = -2.0 * M2 * l2 * rdot1 * omega1 * cosD
+          - 2.0 * M2 * l2 * rdot2 * omega2
+          + M2 * l1 * l2 * w1sq * sinD
+          - M2 * G * l2 * sin(theta2);
+    f.w = 2.0 * M2 * rdot1 * omega1 * sinD
+          + M2 * l1 * w1sq * cosD
+          + M2 * l2 * w2sq
+          + M2 * G * cos(theta2)
+          - u_k2 * r2;
+
+    vec4 accel = solveCramer4(M, f);
+    da = vec4(omega1, accel.x, rdot1, accel.y);
+    db = vec4(omega2, accel.z, rdot2, accel.w);
+}
+
+void elasticDeriv(int mode, vec4 sa, vec4 sb, out vec4 da, out vec4 db) {
+    if (mode == 0) {
+        systemDerivA(sa.x, sa.y, sa.z, sa.w, sb.x, sb.y, da, db);
+    } else if (mode == 1) {
+        systemDerivB(sa.x, sa.y, sb.x, sb.y, sb.z, sb.w, da, db);
+    } else {
+        systemDerivC(sa.x, sa.y, sa.z, sa.w, sb.x, sb.y, sb.z, sb.w, da, db);
+    }
+}
+
+void elasticStep(vec4 sa, vec4 sb, out vec4 newSA, out vec4 newSB) {
+    vec4 ca, cb;
+    if (u_elasticMode == 0) {
+        ca = sa;
+        cb = vec4(sb.x, sb.y, 0.0, 0.0);
+    } else if (u_elasticMode == 1) {
+        ca = vec4(sa.x, sa.y, 0.0, 0.0);
+        cb = vec4(sa.z, sa.w, sb.x, sb.y);
+    } else {
+        ca = sa;
+        cb = sb;
+    }
+
+    float dt = u_dt;
+    vec4 da1, db1, da2, db2, da3, db3, da4, db4;
+    elasticDeriv(u_elasticMode, ca, cb, da1, db1);
+    elasticDeriv(u_elasticMode, ca + 0.5*dt*da1, cb + 0.5*dt*db1, da2, db2);
+    elasticDeriv(u_elasticMode, ca + 0.5*dt*da2, cb + 0.5*dt*db2, da3, db3);
+    elasticDeriv(u_elasticMode, ca + dt*da3, cb + dt*db3, da4, db4);
+
+    vec4 newCA = ca + (dt / 6.0) * (da1 + 2.0*da2 + 2.0*da3 + da4);
+    vec4 newCB = cb + (dt / 6.0) * (db1 + 2.0*db2 + 2.0*db3 + db4);
+
+    if (u_elasticMode == 0) {
+        newSA = newCA;
+        newSB = vec4(newCB.x, newCB.y, 0.0, 1.0);
+    } else if (u_elasticMode == 1) {
+        newSA = vec4(newCA.x, newCA.y, newCB.x, newCB.y);
+        newSB = vec4(newCB.z, newCB.w, 0.0, 1.0);
+    } else {
+        newSA = newCA;
+        newSB = newCB;
+    }
+}
+
+float circularDiff(float a, float b) {
+    float d = a - b;
+    return d - 2.0 * PI * floor(d / (2.0 * PI) + 0.5);
+}
+
+float measureElasticDivergence(vec4 bA, vec4 bB, vec4 pA, vec4 pB) {
+    float d_t1 = circularDiff(bA.x, pA.x);
+    float d_o1 = bA.y - pA.y;
+    float dist_sq = d_t1 * d_t1 + d_o1 * d_o1;
+
+    if (u_elasticMode == 0) {
+        float d_t2 = circularDiff(bB.x, pB.x);
+        float d_o2 = bB.y - pB.y;
+        float d_r1 = bA.z - pA.z;
+        float d_rd1 = bA.w - pA.w;
+        dist_sq += d_t2*d_t2 + d_o2*d_o2 + d_r1*d_r1 + d_rd1*d_rd1;
+    } else if (u_elasticMode == 1) {
+        float d_t2 = circularDiff(bA.z, pA.z);
+        float d_o2 = bA.w - pA.w;
+        float d_r2 = bB.x - pB.x;
+        float d_rd2 = bB.y - pB.y;
+        dist_sq += d_t2*d_t2 + d_o2*d_o2 + d_r2*d_r2 + d_rd2*d_rd2;
+    } else {
+        float d_t2 = circularDiff(bB.x, pB.x);
+        float d_o2 = bB.y - pB.y;
+        float d_r1 = bA.z - pA.z;
+        float d_rd1 = bA.w - pA.w;
+        float d_r2 = bB.z - pB.z;
+        float d_rd2 = bB.w - pB.w;
+        dist_sq += d_t2*d_t2 + d_o2*d_o2 + d_r1*d_r1 + d_rd1*d_rd1 + d_r2*d_r2 + d_rd2*d_rd2;
+    }
+
+    return sqrt(dist_sq);
+}
+
+void main() {
+    vec4 bA = texture(u_baseTextureA, v_uv);
+    vec4 bB = texture(u_baseTextureB, v_uv);
+    vec4 pA = texture(u_pertTextureA, v_uv);
+    vec4 pB = texture(u_pertTextureB, v_uv);
+    vec4 div = texture(u_divergenceTexture, v_uv);
+
+    float iter = div.r;
+    float hasDiv = div.g;
+
+    vec4 newBA, newBB, newPA, newPB;
+    elasticStep(bA, bB, newBA, newBB);
+    elasticStep(pA, pB, newPA, newPB);
+
+    if (hasDiv < 0.5) {
+        float dist = measureElasticDivergence(newBA, newBB, newPA, newPB);
+        if (dist > u_threshold) {
+            iter = float(u_currentIter);
+            hasDiv = 1.0;
+        }
+    }
+
+    outBaseA = newBA;
+    outBaseB = newBB;
+    outPertA = newPA;
+    outPertB = newPB;
+    divergenceData = vec4(iter, hasDiv, 0.0, 1.0);
+}
+    </script>
+
     <script>
         class ChaosRenderer {
             constructor(canvas) {
@@ -1572,7 +1844,8 @@ void main() {
                 if (!this.gl) { alert('WebGL 2.0 not supported!'); return; }
                 this.gl.getExtension('EXT_color_buffer_float');
                 
-                this.vizMode = 'distance';
+                this.system = 'rigid';  // 'rigid', 'elastic1', 'elastic2', 'elastic12'
+                this.vizMode = 'distance';  // 'distance' or 'divergence'
                 this.resolution = 512;
                 this.theta1Range = [-3.14, 3.14];
                 this.theta2Range = [-3.14, 3.14];
@@ -1584,6 +1857,8 @@ void main() {
                 this.maxIter = 5000;
                 this.threshold = 0.05;
                 this.perturb = 0.00001;
+                this.k1 = 50;
+                this.k2 = 50;
                 this.colormap = 6;
                 this.toneMapping = 0;
                 
@@ -1648,7 +1923,12 @@ void main() {
                     distance: this.createProgram('vertex-shader', 'distance-shader'),
                     initDivergence: this.createProgram('vertex-shader', 'init-divergence-shader'),
                     divergence: this.createProgram('vertex-shader', 'divergence-shader'),
-                    render: this.createProgram('vertex-shader', 'render-shader')
+                    render: this.createProgram('vertex-shader', 'render-shader'),
+                    initElastic: this.createProgram('vertex-shader', 'init-elastic-shader'),
+                    physicsElastic: this.createProgram('vertex-shader', 'physics-elastic-shader'),
+                    distanceElastic: this.createProgram('vertex-shader', 'distance-elastic-shader'),
+                    initElasticDivergence: this.createProgram('vertex-shader', 'init-elastic-divergence-shader'),
+                    divergenceElastic: this.createProgram('vertex-shader', 'divergence-elastic-shader')
                 };
             }
             
@@ -1678,6 +1958,10 @@ void main() {
 
                 this.stateTextures = [this.createFloatTexture(res), this.createFloatTexture(res)];
                 this.perturbedStateTextures = [this.createFloatTexture(res), this.createFloatTexture(res)];
+                this.stateATextures = [this.createFloatTexture(res), this.createFloatTexture(res)];
+                this.stateBTextures = [this.createFloatTexture(res), this.createFloatTexture(res)];
+                this.perturbedStateATextures = [this.createFloatTexture(res), this.createFloatTexture(res)];
+                this.perturbedStateBTextures = [this.createFloatTexture(res), this.createFloatTexture(res)];
                 this.dataTextures = [this.createFloatTexture(res), this.createFloatTexture(res)];
                 this.framebuffers = [gl.createFramebuffer(), gl.createFramebuffer()];
                 this.readIndex = 0;
@@ -1696,6 +1980,12 @@ void main() {
             }
             
             setupControls() {
+                document.getElementById('systemType').addEventListener('change', (e) => {
+                    this.system = e.target.value;
+                    this.updateModeUI();
+                    this.reset();
+                });
+
                 document.getElementById('vizMode').addEventListener('change', (e) => {
                     this.vizMode = e.target.value;
                     this.updateModeUI();
@@ -1787,9 +2077,18 @@ void main() {
                 });
                 
                 document.getElementById('downloadBtn').addEventListener('click', () => this.download());
-                document.getElementById('createVisBtn').addEventListener('click', () => this.openVisModal());
-                document.getElementById('visCancelBtn').addEventListener('click', () => this.closeVisModal());
-                document.getElementById('visStartBtn').addEventListener('click', () => this.startVisualization());
+
+                document.getElementById('k1').addEventListener('input', (e) => {
+                    this.k1 = parseFloat(e.target.value);
+                    document.getElementById('k1Value').textContent = this.k1;
+                    this.reset();
+                });
+
+                document.getElementById('k2').addEventListener('input', (e) => {
+                    this.k2 = parseFloat(e.target.value);
+                    document.getElementById('k2Value').textContent = this.k2;
+                    this.reset();
+                });
                 
                 this.updateModeUI();
                 this.updateLegend();
@@ -1797,67 +2096,36 @@ void main() {
             
             download() {
                 const link = document.createElement('a');
-                link.download = `chaos-${this.vizMode}-frame${this.frameCount}.png`;
+                link.download = `chaos-${this.system}-${this.vizMode}-frame${this.frameCount}.png`;
                 link.href = this.canvas.toDataURL('image/png');
                 link.click();
             }
 
-            openVisModal() {
-                document.getElementById('visModal').classList.add('active');
-            }
-
-            closeVisModal() {
-                document.getElementById('visModal').classList.remove('active');
-                if (this.videoRenderer) {
-                    this.videoRenderer.cancel();
-                    this.videoRenderer = null;
-                }
-            }
-
-            setVisStatus(text, progress) {
-                const el = document.getElementById('visStatus');
-                el.textContent = text;
-                el.classList.add('active');
-                const bar = document.getElementById('visProgress');
-                const fill = document.getElementById('visProgressFill');
-                bar.classList.add('active');
-                fill.style.width = (progress * 100) + '%';
-            }
-
-            async startVisualization() {
-                const params = {
-                    resolution: parseInt(document.getElementById('visResolution').value),
-                    maxIter: parseInt(document.getElementById('visMaxIter').value),
-                    itersPerFrame: parseInt(document.getElementById('visItersPerFrame').value),
-                    dt: parseFloat(document.getElementById('visDt').value),
-                    threshold: parseFloat(document.getElementById('visThreshold').value),
-                    perturb: parseFloat(document.getElementById('visPerturb').value),
-                    clipPercentile: parseFloat(document.getElementById('visClipPercentile').value) / 100,
-                    divColormap: parseInt(document.getElementById('visDivColormap').value),
-                    distColormap: parseInt(document.getElementById('visDistColormap').value),
-                    toneMapping: parseInt(document.getElementById('visToneMapping').value),
-                    theta1Range: [...this.theta1Range],
-                    theta2Range: [...this.theta2Range],
-                    omega1: this.omega1,
-                    omega2: this.omega2,
-                    seed: Math.random() * 1000
-                };
-                document.getElementById('visStartBtn').disabled = true;
-                this.videoRenderer = new VideoRenderer(params, this);
-                await this.videoRenderer.run();
-                document.getElementById('visStartBtn').disabled = false;
-            }
-
             updateModeUI() {
                 const isDistance = this.vizMode === 'distance';
+                const isElastic = this.system !== 'rigid';
+                const isDivergence = this.vizMode === 'divergence';
+
+                // Show/hide control sections
                 document.getElementById('distanceControls').style.display = isDistance ? 'block' : 'none';
-                document.getElementById('divergenceControls').style.display = isDistance ? 'none' : 'block';
-                document.getElementById('modeIndicator').textContent = 'Mode: ' + (isDistance ? 'Bob2 Distance' : 'Divergence Time');
-                document.getElementById('subtitle').textContent = isDistance
-                    ? 'Total distance traveled by the second pendulum bob'
-                    : 'Iterations until perturbed trajectory diverges';
-                document.getElementById('frameRow').style.display = isDistance ? 'block' : 'none';
-                document.getElementById('maxDistRow').style.display = isDistance ? 'block' : 'none';
+                document.getElementById('elasticControls').style.display = isElastic ? 'block' : 'none';
+                document.getElementById('divergenceControls').style.display = isDivergence ? 'block' : 'none';
+
+                // Update mode indicator
+                const systemNames = { rigid: 'Rigid', elastic1: 'Elastic Arm 1', elastic2: 'Elastic Arm 2', elastic12: 'Both Elastic' };
+                const modeNames = { distance: 'Bob2 Distance', divergence: 'Divergence Time' };
+                document.getElementById('modeIndicator').textContent = systemNames[this.system] + ' \u00b7 ' + modeNames[this.vizMode];
+
+                // Update subtitle
+                const subtitles = {
+                    distance: isElastic ? 'Total distance traveled by bob2 (elastic system)' : 'Total distance traveled by the second pendulum bob',
+                    divergence: 'Iterations until perturbed trajectory diverges'
+                };
+                document.getElementById('subtitle').textContent = subtitles[this.vizMode];
+
+                // Stats visibility
+                document.getElementById('frameRow').style.display = isDivergence ? 'none' : 'block';
+                document.getElementById('maxDistRow').style.display = isDivergence ? 'none' : 'block';
             }
 
             updateLegend() {
@@ -1980,7 +2248,7 @@ void main() {
                 this.stopDivergence();
                 const res = this.resolution;
 
-                if (this.vizMode === 'distance') {
+                if (this.system === 'rigid' && this.vizMode === 'distance') {
                     gl.useProgram(this.programs.init);
                     gl.bindVertexArray(this.vaos.init);
                     gl.uniform2f(gl.getUniformLocation(this.programs.init, 'u_theta1Range'), this.theta1Range[0], this.theta1Range[1]);
@@ -2005,7 +2273,7 @@ void main() {
                     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.dataTextures[1], 0);
                     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
                     [this.dataTextures[0], this.dataTextures[1]] = [this.dataTextures[1], this.dataTextures[0]];
-                } else if (this.vizMode === 'divergence') {
+                } else if (this.system === 'rigid' && this.vizMode === 'divergence') {
                     gl.useProgram(this.programs.initDivergence);
                     gl.bindVertexArray(this.vaos.initDivergence);
                     gl.uniform2f(gl.getUniformLocation(this.programs.initDivergence, 'u_theta1Range'), this.theta1Range[0], this.theta1Range[1]);
@@ -2023,6 +2291,63 @@ void main() {
                     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
                     this.readIndex = 0;
                     this.startDivergence();
+                } else if (this.system !== 'rigid' && this.vizMode === 'divergence') {
+                    const mode = this.system === 'elastic1' ? 0 : this.system === 'elastic2' ? 1 : 2;
+                    gl.useProgram(this.programs.initElasticDivergence);
+                    gl.bindVertexArray(this.vaos.initElasticDivergence);
+                    gl.uniform2f(gl.getUniformLocation(this.programs.initElasticDivergence, 'u_theta1Range'), this.theta1Range[0], this.theta1Range[1]);
+                    gl.uniform2f(gl.getUniformLocation(this.programs.initElasticDivergence, 'u_theta2Range'), this.theta2Range[0], this.theta2Range[1]);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.initElasticDivergence, 'u_omega1'), this.omega1);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.initElasticDivergence, 'u_omega2'), this.omega2);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.initElasticDivergence, 'u_elasticMode'), mode);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.initElasticDivergence, 'u_perturb'), this.perturb);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.initElasticDivergence, 'u_seed'), this.seed);
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.stateATextures[0], 0);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, this.stateBTextures[0], 0);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT2, gl.TEXTURE_2D, this.perturbedStateATextures[0], 0);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT3, gl.TEXTURE_2D, this.perturbedStateBTextures[0], 0);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT4, gl.TEXTURE_2D, this.dataTextures[0], 0);
+                    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3, gl.COLOR_ATTACHMENT4]);
+                    gl.viewport(0, 0, res, res);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    this.readIndex = 0;
+                    this.startDivergence();
+                } else if (this.system !== 'rigid' && this.vizMode === 'distance') {
+                    const mode = this.system === 'elastic1' ? 0 : this.system === 'elastic2' ? 1 : 2;
+
+                    gl.useProgram(this.programs.initElastic);
+                    gl.bindVertexArray(this.vaos.initElastic);
+                    gl.uniform2f(gl.getUniformLocation(this.programs.initElastic, 'u_theta1Range'), this.theta1Range[0], this.theta1Range[1]);
+                    gl.uniform2f(gl.getUniformLocation(this.programs.initElastic, 'u_theta2Range'), this.theta2Range[0], this.theta2Range[1]);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.initElastic, 'u_omega1'), this.omega1);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.initElastic, 'u_omega2'), this.omega2);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.initElastic, 'u_elasticMode'), mode);
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.stateATextures[0], 0);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, this.stateBTextures[0], 0);
+                    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+                    gl.viewport(0, 0, res, res);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+                    gl.useProgram(this.programs.distanceElastic);
+                    gl.bindVertexArray(this.vaos.distanceElastic);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distanceElastic, 'u_stateTextureA'), 0);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distanceElastic, 'u_stateTextureB'), 1);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distanceElastic, 'u_distanceTexture'), 2);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distanceElastic, 'u_reset'), 1);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distanceElastic, 'u_elasticMode'), mode);
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.bindTexture(gl.TEXTURE_2D, this.stateATextures[0]);
+                    gl.activeTexture(gl.TEXTURE1);
+                    gl.bindTexture(gl.TEXTURE_2D, this.stateBTextures[0]);
+                    gl.activeTexture(gl.TEXTURE2);
+                    gl.bindTexture(gl.TEXTURE_2D, this.dataTextures[0]);
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[1]);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.dataTextures[1], 0);
+                    gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    [this.dataTextures[0], this.dataTextures[1]] = [this.dataTextures[1], this.dataTextures[0]];
                 }
                 gl.bindFramebuffer(gl.FRAMEBUFFER, null);
                 gl.bindVertexArray(null);
@@ -2030,6 +2355,10 @@ void main() {
 
             startDivergence() {
                 this.stopDivergence();
+                if (this.system !== 'rigid') {
+                    this.startElasticDivergence();
+                    return;
+                }
                 this.divergenceInterval = setInterval(() => {
                     if (this.frameCount >= this.maxIter) {
                         this.stopDivergence();
@@ -2082,8 +2411,67 @@ void main() {
                 }
             }
 
+            startElasticDivergence() {
+                this.stopDivergence();
+                const mode = this.system === 'elastic1' ? 0 : this.system === 'elastic2' ? 1 : 2;
+                this.divergenceInterval = setInterval(() => {
+                    if (this.frameCount >= this.maxIter) {
+                        this.stopDivergence();
+                        this.computeMaxValue();
+                        return;
+                    }
+                    const gl = this.gl;
+                    const res = this.resolution;
+                    const batchSize = 20;
+                    for (let i = 0; i < batchSize; i++) {
+                        if (this.frameCount >= this.maxIter) break;
+                        this.frameCount++;
+                        const readIdx = this.readIndex;
+                        const writeIdx = 1 - this.readIndex;
+                        gl.useProgram(this.programs.divergenceElastic);
+                        gl.bindVertexArray(this.vaos.divergenceElastic);
+                        gl.uniform1i(gl.getUniformLocation(this.programs.divergenceElastic, 'u_baseTextureA'), 0);
+                        gl.uniform1i(gl.getUniformLocation(this.programs.divergenceElastic, 'u_baseTextureB'), 1);
+                        gl.uniform1i(gl.getUniformLocation(this.programs.divergenceElastic, 'u_pertTextureA'), 2);
+                        gl.uniform1i(gl.getUniformLocation(this.programs.divergenceElastic, 'u_pertTextureB'), 3);
+                        gl.uniform1i(gl.getUniformLocation(this.programs.divergenceElastic, 'u_divergenceTexture'), 4);
+                        gl.uniform1f(gl.getUniformLocation(this.programs.divergenceElastic, 'u_dt'), this.dt);
+                        gl.uniform1f(gl.getUniformLocation(this.programs.divergenceElastic, 'u_threshold'), this.threshold);
+                        gl.uniform1i(gl.getUniformLocation(this.programs.divergenceElastic, 'u_currentIter'), this.frameCount);
+                        gl.uniform1i(gl.getUniformLocation(this.programs.divergenceElastic, 'u_elasticMode'), mode);
+                        gl.uniform1f(gl.getUniformLocation(this.programs.divergenceElastic, 'u_k1'), this.k1);
+                        gl.uniform1f(gl.getUniformLocation(this.programs.divergenceElastic, 'u_k2'), this.k2);
+                        gl.activeTexture(gl.TEXTURE0);
+                        gl.bindTexture(gl.TEXTURE_2D, this.stateATextures[readIdx]);
+                        gl.activeTexture(gl.TEXTURE1);
+                        gl.bindTexture(gl.TEXTURE_2D, this.stateBTextures[readIdx]);
+                        gl.activeTexture(gl.TEXTURE2);
+                        gl.bindTexture(gl.TEXTURE_2D, this.perturbedStateATextures[readIdx]);
+                        gl.activeTexture(gl.TEXTURE3);
+                        gl.bindTexture(gl.TEXTURE_2D, this.perturbedStateBTextures[readIdx]);
+                        gl.activeTexture(gl.TEXTURE4);
+                        gl.bindTexture(gl.TEXTURE_2D, this.dataTextures[readIdx]);
+                        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
+                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.stateATextures[writeIdx], 0);
+                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, this.stateBTextures[writeIdx], 0);
+                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT2, gl.TEXTURE_2D, this.perturbedStateATextures[writeIdx], 0);
+                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT3, gl.TEXTURE_2D, this.perturbedStateBTextures[writeIdx], 0);
+                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT4, gl.TEXTURE_2D, this.dataTextures[writeIdx], 0);
+                        gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3, gl.COLOR_ATTACHMENT4]);
+                        gl.viewport(0, 0, res, res);
+                        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                        this.readIndex = writeIdx;
+                    }
+                }, 20);
+                this.divergenceRenderInterval = setInterval(() => this.computeMaxValue(), 500);
+            }
+
             step() {
                 if (this.vizMode === 'divergence') return;
+                if (this.system !== 'rigid') {
+                    this.stepElastic();
+                    return;
+                }
                 const gl = this.gl;
                 const res = this.resolution;
                 for (let i = 0; i < this.iterationsPerFrame; i++) {
@@ -2117,9 +2505,62 @@ void main() {
                 this.frameCount += this.iterationsPerFrame;
             }
 
+            stepElastic() {
+                const gl = this.gl;
+                const res = this.resolution;
+                const mode = this.system === 'elastic1' ? 0 : this.system === 'elastic2' ? 1 : 2;
+
+                for (let i = 0; i < this.iterationsPerFrame; i++) {
+                    const readIdx = this.readIndex;
+                    const writeIdx = 1 - this.readIndex;
+
+                    // Physics step (MRT with 2 outputs)
+                    gl.useProgram(this.programs.physicsElastic);
+                    gl.bindVertexArray(this.vaos.physicsElastic);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.physicsElastic, 'u_stateTextureA'), 0);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.physicsElastic, 'u_stateTextureB'), 1);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.physicsElastic, 'u_dt'), this.dt);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.physicsElastic, 'u_elasticMode'), mode);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.physicsElastic, 'u_k1'), this.k1);
+                    gl.uniform1f(gl.getUniformLocation(this.programs.physicsElastic, 'u_k2'), this.k2);
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.bindTexture(gl.TEXTURE_2D, this.stateATextures[readIdx]);
+                    gl.activeTexture(gl.TEXTURE1);
+                    gl.bindTexture(gl.TEXTURE_2D, this.stateBTextures[readIdx]);
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.stateATextures[writeIdx], 0);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, this.stateBTextures[writeIdx], 0);
+                    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+                    gl.viewport(0, 0, res, res);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+                    // Distance step
+                    gl.useProgram(this.programs.distanceElastic);
+                    gl.bindVertexArray(this.vaos.distanceElastic);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distanceElastic, 'u_stateTextureA'), 0);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distanceElastic, 'u_stateTextureB'), 1);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distanceElastic, 'u_distanceTexture'), 2);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distanceElastic, 'u_reset'), 0);
+                    gl.uniform1i(gl.getUniformLocation(this.programs.distanceElastic, 'u_elasticMode'), mode);
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.bindTexture(gl.TEXTURE_2D, this.stateATextures[writeIdx]);
+                    gl.activeTexture(gl.TEXTURE1);
+                    gl.bindTexture(gl.TEXTURE_2D, this.stateBTextures[writeIdx]);
+                    gl.activeTexture(gl.TEXTURE2);
+                    gl.bindTexture(gl.TEXTURE_2D, this.dataTextures[readIdx]);
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[1]);
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.dataTextures[writeIdx], 0);
+                    gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+                    this.readIndex = writeIdx;
+                }
+                this.frameCount += this.iterationsPerFrame;
+            }
+
             render() {
                 const gl = this.gl;
-                if (this.vizMode === 'distance') {
+                if (this.vizMode !== 'divergence') {
                     this.computeMaxValue();
                 }
                 gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -2181,418 +2622,6 @@ void main() {
             }
         }
 
-        class VideoRenderer {
-            constructor(params, renderer) {
-                this.params = params;
-                this.renderer = renderer;
-                this.cancelled = false;
-                this.offscreen = null;
-                this.gl = null;
-            }
-
-            cancel() {
-                this.cancelled = true;
-            }
-
-            async run() {
-                const p = this.params;
-                const res = p.resolution;
-                const totalFrames = Math.ceil(p.maxIter / p.itersPerFrame);
-
-                this.renderer.setVisStatus('Creating offscreen context...', 0);
-                await this.sleep(50);
-                if (this.cancelled) return;
-
-                this.offscreen = document.createElement('canvas');
-                this.offscreen.width = res;
-                this.offscreen.height = res;
-                this.offscreen.style.position = 'fixed';
-                this.offscreen.style.left = '-9999px';
-                this.offscreen.style.top = '-9999px';
-                document.body.appendChild(this.offscreen);
-                this.gl = this.offscreen.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
-                if (!this.gl) { alert('WebGL 2.0 not available'); return; }
-                const gl = this.gl;
-                gl.getExtension('EXT_color_buffer_float');
-
-                this.createPrograms();
-                this.createBuffers();
-                this.createTextures();
-                this.initDistance();
-                this.initDivergence();
-
-                const stream = this.offscreen.captureStream(0);
-                const track = stream.getVideoTracks()[0];
-                const chunks = [];
-                const mimeTypes = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
-                let mime = mimeTypes.find(m => MediaRecorder.isTypeSupported(m)) || '';
-                const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 20000000 } : undefined);
-                rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-                const videoBlob = new Promise((resolve) => {
-                    rec.onstop = () => resolve(new Blob(chunks, { type: rec.mimeType }));
-                });
-                rec.start();
-
-                for (let frame = 0; frame < totalFrames; frame++) {
-                    if (this.cancelled) break;
-                    this.stepDistance(p.itersPerFrame);
-                    this.stepDivergence(p.itersPerFrame);
-
-                    const progress = (frame + 1) / totalFrames;
-                    this.renderer.setVisStatus(
-                        `Simulating frame ${frame + 1} / ${totalFrames} (${res}x${res})...`,
-                        progress * 0.85
-                    );
-                    await this.sleep(0);
-                }
-
-                if (this.cancelled) {
-                    if (rec.state !== 'inactive') rec.stop();
-                    document.body.removeChild(this.offscreen);
-                    return;
-                }
-
-                this.renderer.setVisStatus('Computing dynamic range...', 0.9);
-                await this.sleep(50);
-
-                const range = this.computeRanges(p.clipPercentile);
-                const renderEvery = Math.max(1, Math.floor(totalFrames / 60));
-                let capturedFrames = 0;
-
-                for (let pass = 0; pass <= totalFrames; pass += renderEvery) {
-                    if (this.cancelled) break;
-                    const approxRange = this.computeQuickRange();
-                    this.renderCombinedFrameFinal(approxRange);
-                    await this.sleep(50);
-                    if (track.requestFrame) track.requestFrame();
-                    capturedFrames++;
-                    const prog = 0.9 + 0.08 * (pass / totalFrames);
-                    this.renderer.setVisStatus(`Rendering video frame ${capturedFrames}...`, prog);
-                    await this.sleep(0);
-                }
-
-                this.renderCombinedFrameFinal(range);
-                if (track.requestFrame) track.requestFrame();
-                capturedFrames++;
-
-                this.renderer.setVisStatus('Encoding video...', 0.98);
-                await this.sleep(50);
-
-                if (rec.state !== 'inactive') rec.stop();
-                const blob = await videoBlob;
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `chaos-combined-${res}x${res}.webm`;
-                a.click();
-                URL.revokeObjectURL(url);
-                document.body.removeChild(this.offscreen);
-
-                this.renderer.setVisStatus('Done! Downloaded ' + capturedFrames + ' frames.', 1.0);
-            }
-
-            sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-            compileShader(type, source) {
-                const gl = this.gl;
-                const shader = gl.createShader(type);
-                gl.shaderSource(shader, source.trim());
-                gl.compileShader(shader);
-                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-                    console.error('Shader error:', gl.getShaderInfoLog(shader));
-                    return null;
-                }
-                return shader;
-            }
-
-            createProg(vsId, fsId) {
-                const gl = this.gl;
-                const vs = this.compileShader(gl.VERTEX_SHADER, document.getElementById(vsId).textContent);
-                const fs = this.compileShader(gl.FRAGMENT_SHADER, document.getElementById(fsId).textContent);
-                const prog = gl.createProgram();
-                gl.attachShader(prog, vs);
-                gl.attachShader(prog, fs);
-                gl.linkProgram(prog);
-                if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-                    console.error('Link error:', gl.getProgramInfoLog(prog));
-                    return null;
-                }
-                return prog;
-            }
-
-            createPrograms() {
-                this.programs = {
-                    init: this.createProg('vertex-shader', 'init-shader'),
-                    physics: this.createProg('vertex-shader', 'physics-shader'),
-                    distance: this.createProg('vertex-shader', 'distance-shader'),
-                    initDivergence: this.createProg('vertex-shader', 'init-divergence-shader'),
-                    divergence: this.createProg('vertex-shader', 'divergence-shader'),
-                    combinedRender: this.createProg('vertex-shader', 'combined-render-shader')
-                };
-            }
-
-            createBuffers() {
-                const gl = this.gl;
-                const positions = new Float32Array([-1,-1, 1,-1, -1,1, 1,1]);
-                this.quadBuffer = gl.createBuffer();
-                gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
-                gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
-                this.vaos = {};
-                for (const [name, prog] of Object.entries(this.programs)) {
-                    const vao = gl.createVertexArray();
-                    gl.bindVertexArray(vao);
-                    gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
-                    const posLoc = gl.getAttribLocation(prog, 'a_position');
-                    gl.enableVertexAttribArray(posLoc);
-                    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-                    this.vaos[name] = vao;
-                }
-                gl.bindVertexArray(null);
-            }
-
-            createFloatTexture(size) {
-                const gl = this.gl;
-                const tex = gl.createTexture();
-                gl.bindTexture(gl.TEXTURE_2D, tex);
-                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, size, size, 0, gl.RGBA, gl.FLOAT, null);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-                return tex;
-            }
-
-            createTextures() {
-                const res = this.params.resolution;
-                this.distStateTex = [this.createFloatTexture(res), this.createFloatTexture(res)];
-                this.distDataTex = [this.createFloatTexture(res), this.createFloatTexture(res)];
-                this.divBaseTex = [this.createFloatTexture(res), this.createFloatTexture(res)];
-                this.divPertTex = [this.createFloatTexture(res), this.createFloatTexture(res)];
-                this.divDataTex = [this.createFloatTexture(res), this.createFloatTexture(res)];
-                this.fbs = [this.gl.createFramebuffer(), this.gl.createFramebuffer()];
-                this.distReadIdx = 0;
-                this.divReadIdx = 0;
-                this.distFrameCount = 0;
-                this.divFrameCount = 0;
-            }
-
-            initDistance() {
-                const gl = this.gl;
-                const p = this.params;
-                const res = p.resolution;
-                gl.useProgram(this.programs.init);
-                gl.bindVertexArray(this.vaos.init);
-                gl.uniform2f(gl.getUniformLocation(this.programs.init, 'u_theta1Range'), p.theta1Range[0], p.theta1Range[1]);
-                gl.uniform2f(gl.getUniformLocation(this.programs.init, 'u_theta2Range'), p.theta2Range[0], p.theta2Range[1]);
-                gl.uniform1f(gl.getUniformLocation(this.programs.init, 'u_omega1'), p.omega1);
-                gl.uniform1f(gl.getUniformLocation(this.programs.init, 'u_omega2'), p.omega2);
-                gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbs[0]);
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.distStateTex[0], 0);
-                gl.viewport(0, 0, res, res);
-                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-                gl.useProgram(this.programs.distance);
-                gl.bindVertexArray(this.vaos.distance);
-                gl.uniform1i(gl.getUniformLocation(this.programs.distance, 'u_stateTexture'), 0);
-                gl.uniform1i(gl.getUniformLocation(this.programs.distance, 'u_distanceTexture'), 1);
-                gl.uniform1i(gl.getUniformLocation(this.programs.distance, 'u_reset'), 1);
-                gl.activeTexture(gl.TEXTURE0);
-                gl.bindTexture(gl.TEXTURE_2D, this.distStateTex[0]);
-                gl.activeTexture(gl.TEXTURE1);
-                gl.bindTexture(gl.TEXTURE_2D, this.distDataTex[0]);
-                gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbs[1]);
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.distDataTex[1], 0);
-                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-                [this.distDataTex[0], this.distDataTex[1]] = [this.distDataTex[1], this.distDataTex[0]];
-                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-                gl.bindVertexArray(null);
-            }
-
-            initDivergence() {
-                const gl = this.gl;
-                const p = this.params;
-                const res = p.resolution;
-                gl.useProgram(this.programs.initDivergence);
-                gl.bindVertexArray(this.vaos.initDivergence);
-                gl.uniform2f(gl.getUniformLocation(this.programs.initDivergence, 'u_theta1Range'), p.theta1Range[0], p.theta1Range[1]);
-                gl.uniform2f(gl.getUniformLocation(this.programs.initDivergence, 'u_theta2Range'), p.theta2Range[0], p.theta2Range[1]);
-                gl.uniform1f(gl.getUniformLocation(this.programs.initDivergence, 'u_omega1'), p.omega1);
-                gl.uniform1f(gl.getUniformLocation(this.programs.initDivergence, 'u_omega2'), p.omega2);
-                gl.uniform1f(gl.getUniformLocation(this.programs.initDivergence, 'u_perturb'), p.perturb);
-                gl.uniform1f(gl.getUniformLocation(this.programs.initDivergence, 'u_seed'), p.seed);
-                gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbs[0]);
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.divBaseTex[0], 0);
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, this.divPertTex[0], 0);
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT2, gl.TEXTURE_2D, this.divDataTex[0], 0);
-                gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
-                gl.viewport(0, 0, res, res);
-                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-                gl.bindVertexArray(null);
-            }
-
-            stepDistance(n) {
-                const gl = this.gl;
-                const p = this.params;
-                const res = p.resolution;
-                for (let i = 0; i < n; i++) {
-                    const r = this.distReadIdx;
-                    const w = 1 - r;
-                    gl.useProgram(this.programs.physics);
-                    gl.bindVertexArray(this.vaos.physics);
-                    gl.uniform1i(gl.getUniformLocation(this.programs.physics, 'u_stateTexture'), 0);
-                    gl.uniform1f(gl.getUniformLocation(this.programs.physics, 'u_dt'), p.dt);
-                    gl.activeTexture(gl.TEXTURE0);
-                    gl.bindTexture(gl.TEXTURE_2D, this.distStateTex[r]);
-                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbs[0]);
-                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.distStateTex[w], 0);
-                    gl.viewport(0, 0, res, res);
-                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-                    gl.useProgram(this.programs.distance);
-                    gl.bindVertexArray(this.vaos.distance);
-                    gl.uniform1i(gl.getUniformLocation(this.programs.distance, 'u_stateTexture'), 0);
-                    gl.uniform1i(gl.getUniformLocation(this.programs.distance, 'u_distanceTexture'), 1);
-                    gl.uniform1i(gl.getUniformLocation(this.programs.distance, 'u_reset'), 0);
-                    gl.activeTexture(gl.TEXTURE0);
-                    gl.bindTexture(gl.TEXTURE_2D, this.distStateTex[w]);
-                    gl.activeTexture(gl.TEXTURE1);
-                    gl.bindTexture(gl.TEXTURE_2D, this.distDataTex[r]);
-                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbs[1]);
-                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.distDataTex[w], 0);
-                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-                    this.distReadIdx = w;
-                }
-                this.distFrameCount += n;
-            }
-
-            stepDivergence(n) {
-                if (this.divFrameCount >= this.params.maxIter) return;
-                const gl = this.gl;
-                const p = this.params;
-                const res = p.resolution;
-                for (let i = 0; i < n; i++) {
-                    if (this.divFrameCount >= p.maxIter) break;
-                    this.divFrameCount++;
-                    const r = this.divReadIdx;
-                    const w = 1 - r;
-                    gl.useProgram(this.programs.divergence);
-                    gl.bindVertexArray(this.vaos.divergence);
-                    gl.uniform1i(gl.getUniformLocation(this.programs.divergence, 'u_stateTexture'), 0);
-                    gl.uniform1i(gl.getUniformLocation(this.programs.divergence, 'u_perturbedTexture'), 1);
-                    gl.uniform1i(gl.getUniformLocation(this.programs.divergence, 'u_divergenceTexture'), 2);
-                    gl.uniform1f(gl.getUniformLocation(this.programs.divergence, 'u_dt'), p.dt);
-                    gl.uniform1f(gl.getUniformLocation(this.programs.divergence, 'u_threshold'), p.threshold);
-                    gl.uniform1i(gl.getUniformLocation(this.programs.divergence, 'u_currentIter'), this.divFrameCount);
-                    gl.activeTexture(gl.TEXTURE0);
-                    gl.bindTexture(gl.TEXTURE_2D, this.divBaseTex[r]);
-                    gl.activeTexture(gl.TEXTURE1);
-                    gl.bindTexture(gl.TEXTURE_2D, this.divPertTex[r]);
-                    gl.activeTexture(gl.TEXTURE2);
-                    gl.bindTexture(gl.TEXTURE_2D, this.divDataTex[r]);
-                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbs[0]);
-                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.divBaseTex[w], 0);
-                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, this.divPertTex[w], 0);
-                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT2, gl.TEXTURE_2D, this.divDataTex[w], 0);
-                    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
-                    gl.viewport(0, 0, res, res);
-                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-                    this.divReadIdx = w;
-                }
-            }
-
-            computeQuickRange() {
-                const gl = this.gl;
-                const res = this.params.resolution;
-                const sampleSize = Math.min(128, res);
-
-                const distFb = gl.createFramebuffer();
-                gl.bindFramebuffer(gl.FRAMEBUFFER, distFb);
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.distDataTex[this.distReadIdx], 0);
-                const distPixels = new Float32Array(sampleSize * sampleSize * 4);
-                gl.viewport(0, 0, sampleSize, sampleSize);
-                gl.readPixels(0, 0, sampleSize, sampleSize, gl.RGBA, gl.FLOAT, distPixels);
-                gl.deleteFramebuffer(distFb);
-
-                const divFb = gl.createFramebuffer();
-                gl.bindFramebuffer(gl.FRAMEBUFFER, divFb);
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.divDataTex[this.divReadIdx], 0);
-                const divPixels = new Float32Array(sampleSize * sampleSize * 4);
-                gl.viewport(0, 0, sampleSize, sampleSize);
-                gl.readPixels(0, 0, sampleSize, sampleSize, gl.RGBA, gl.FLOAT, divPixels);
-                gl.deleteFramebuffer(divFb);
-
-                return this.extractRanges(distPixels, divPixels, this.params.clipPercentile);
-            }
-
-            computeRanges(clipPercentile) {
-                const gl = this.gl;
-                const res = this.params.resolution;
-                const sampleSize = Math.min(128, res);
-
-                const distFb = gl.createFramebuffer();
-                gl.bindFramebuffer(gl.FRAMEBUFFER, distFb);
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.distDataTex[this.distReadIdx], 0);
-                const distPixels = new Float32Array(sampleSize * sampleSize * 4);
-                gl.viewport(0, 0, sampleSize, sampleSize);
-                gl.readPixels(0, 0, sampleSize, sampleSize, gl.RGBA, gl.FLOAT, distPixels);
-                gl.deleteFramebuffer(distFb);
-
-                const divFb = gl.createFramebuffer();
-                gl.bindFramebuffer(gl.FRAMEBUFFER, divFb);
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.divDataTex[this.divReadIdx], 0);
-                const divPixels = new Float32Array(sampleSize * sampleSize * 4);
-                gl.viewport(0, 0, sampleSize, sampleSize);
-                gl.readPixels(0, 0, sampleSize, sampleSize, gl.RGBA, gl.FLOAT, divPixels);
-                gl.deleteFramebuffer(divFb);
-
-                return this.extractRanges(distPixels, divPixels, clipPercentile);
-            }
-
-            extractRanges(distPixels, divPixels, clipPercentile) {
-                let maxDiv = 0;
-                for (let i = 0; i < divPixels.length; i += 4) {
-                    if (divPixels[i] > maxDiv && isFinite(divPixels[i])) maxDiv = divPixels[i];
-                }
-
-                const distances = [];
-                for (let i = 0; i < distPixels.length; i += 4) {
-                    if (distPixels[i + 3] > 0.5) distances.push(distPixels[i + 2]);
-                }
-                distances.sort((a, b) => a - b);
-                const clipIdx = Math.floor(distances.length * clipPercentile);
-                const clipMax = clipIdx < distances.length ? distances[clipIdx] : (distances.length > 0 ? distances[distances.length - 1] : 1);
-
-                return { maxDist: clipMax > 0 ? clipMax : 1, maxDiv: maxDiv > 0 ? maxDiv : 1 };
-            }
-
-            renderCombinedFrameFinal(range) {
-                const gl = this.gl;
-                const p = this.params;
-                const res = p.resolution;
-                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-                gl.viewport(0, 0, res, res);
-                gl.clearColor(1, 1, 1, 1);
-                gl.clear(gl.COLOR_BUFFER_BIT);
-                gl.useProgram(this.programs.combinedRender);
-                gl.bindVertexArray(this.vaos.combinedRender);
-                gl.uniform1i(gl.getUniformLocation(this.programs.combinedRender, 'u_distanceTexture'), 0);
-                gl.uniform1i(gl.getUniformLocation(this.programs.combinedRender, 'u_divergenceTexture'), 1);
-                gl.uniform1i(gl.getUniformLocation(this.programs.combinedRender, 'u_distanceColormap'), p.distColormap);
-                gl.uniform1i(gl.getUniformLocation(this.programs.combinedRender, 'u_divergenceColormap'), p.divColormap);
-                gl.uniform1i(gl.getUniformLocation(this.programs.combinedRender, 'u_toneMapping'), p.toneMapping);
-                gl.uniform1f(gl.getUniformLocation(this.programs.combinedRender, 'u_maxDistance'), range.maxDist);
-                gl.uniform1f(gl.getUniformLocation(this.programs.combinedRender, 'u_maxDivergence'), range.maxDiv);
-                gl.uniform1f(gl.getUniformLocation(this.programs.combinedRender, 'u_distanceClipMax'), range.maxDist);
-                gl.activeTexture(gl.TEXTURE0);
-                gl.bindTexture(gl.TEXTURE_2D, this.distDataTex[this.distReadIdx]);
-                gl.activeTexture(gl.TEXTURE1);
-                gl.bindTexture(gl.TEXTURE_2D, this.divDataTex[this.divReadIdx]);
-                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-                gl.bindVertexArray(null);
-            }
-        }
-        
         const renderer = new ChaosRenderer(document.getElementById('canvas'));
 
         // ── Pendulum Preview Overlay ──────────────────────────────────
