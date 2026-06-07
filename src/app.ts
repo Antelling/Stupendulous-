@@ -1,54 +1,28 @@
 import type { SimulationConfig } from './types/config.ts';
-import { ShaderCompiler } from './webgl/shaderCompiler.ts';
-import { TextureManager } from './webgl/textureManager.ts';
-import { FramebufferManager } from './webgl/framebufferManager.ts';
-import { VertexArrayManager } from './webgl/vertexArrayManager.ts';
+import { DEFAULT_CONFIG } from './types/config.ts';
 import { QuadBuffer } from './webgl/quadBuffer.ts';
+import { TextureManager } from './webgl/textureManager.ts';
 import { UniformSetter } from './webgl/uniformSetter.ts';
-import { RigidSimulator } from './simulation/rigidSimulator.ts';
-import { ElasticSimulator } from './simulation/elasticSimulator.ts';
-import { DivergenceSimulator } from './simulation/divergenceSimulator.ts';
-import { ElasticDivergenceSimulator } from './simulation/elasticDivergenceSimulator.ts';
+import { Simulator } from './simulation/simulator.ts';
 import { Renderer } from './simulation/renderer.ts';
 import { ZoomController } from './simulation/zoomController.ts';
 import { UIController } from './ui/uiController.ts';
 import { StatsTracker } from './ui/statsTracker.ts';
 import { PendulumPreview } from './preview/pendulumPreview.ts';
-import type { ShaderProgram, ShaderName } from './types/shaders.ts';
-
-import vertexSource from './shaders/vertex.glsl?raw';
-import initSource from './shaders/init.glsl?raw';
-import physicsSource from './shaders/physics.glsl?raw';
-import distanceSource from './shaders/distance.glsl?raw';
-import renderSource from './shaders/render.glsl?raw';
-import initDivergenceSource from './shaders/initDivergence.glsl?raw';
-import divergenceSource from './shaders/divergence.glsl?raw';
-import initElasticSource from './shaders/initElastic.glsl?raw';
-import physicsElasticSource from './shaders/physicsElastic.glsl?raw';
-import distanceElasticSource from './shaders/distanceElastic.glsl?raw';
-import initElasticDivergenceSource from './shaders/initElasticDivergence.glsl?raw';
-import divergenceElasticSource from './shaders/divergenceElastic.glsl?raw';
 
 export class ChaosApp {
   private gl: WebGL2RenderingContext;
   private config: SimulationConfig;
-  private programs: Record<string, ShaderProgram> = {};
   private quadBuffer: QuadBuffer;
-  private textures: TextureManager;
-  private framebuffers: FramebufferManager;
-  private uniforms: UniformSetter;
-  private vaos: VertexArrayManager;
-  private rigidSim: RigidSimulator;
-  private elasticSim: ElasticSimulator;
-  private divergenceSim: DivergenceSimulator;
-  private elasticDivergenceSim: ElasticDivergenceSimulator;
+  private sharedTextures: TextureManager;
+  private sharedUniforms: UniformSetter;
+  private simulator: Simulator | null = null;
   private renderer: Renderer;
   private zoomController: ZoomController;
   private ui: UIController;
   private stats: StatsTracker;
-  private _preview: PendulumPreview;
+  private preview: PendulumPreview;
   private canvas: HTMLCanvasElement;
-  private frameCount = 0;
   private isDragging = false;
   private dragStart: { x: number; y: number } | null = null;
   private dragCurrent: { x: number; y: number } | null = null;
@@ -63,75 +37,64 @@ export class ChaosApp {
     gl.getExtension('EXT_color_buffer_float');
 
     this.quadBuffer = new QuadBuffer(gl);
-    this.textures = new TextureManager(gl);
-    this.framebuffers = new FramebufferManager(gl);
-    this.uniforms = new UniformSetter(gl);
-
-    this.vaos = new VertexArrayManager(gl, this.quadBuffer.buffer);
-    this.createPrograms();
-    for (const [_name, program] of Object.entries(this.programs)) {
-      this.vaos.createVAOForProgram(program);
-    }
-
-    this.renderer = new Renderer(gl, this.config, this.textures, this.uniforms, this.programs);
-    this.rigidSim = new RigidSimulator(gl, this.config, this.textures, this.framebuffers, this.uniforms, this.programs);
-    this.elasticSim = new ElasticSimulator(gl, this.config, this.textures, this.framebuffers, this.uniforms, this.programs);
-    this.divergenceSim = new DivergenceSimulator(gl, this.config, this.textures, this.framebuffers, this.uniforms, this.programs, () => this.onDivergenceComplete());
-    this.elasticDivergenceSim = new ElasticDivergenceSimulator(gl, this.config, this.textures, this.framebuffers, this.uniforms, this.programs, () => this.onDivergenceComplete());
+    this.sharedTextures = new TextureManager(gl);
+    this.sharedUniforms = new UniformSetter(gl);
+    this.renderer = new Renderer(gl, this.config, this.sharedTextures, this.sharedUniforms, this.quadBuffer.buffer);
 
     this.zoomController = new ZoomController(this.config, () => this.onZoomChange());
     this.ui = new UIController();
     this.stats = new StatsTracker();
-    this._preview = new PendulumPreview(document.getElementById('canvasWrapper')!, canvas, this.config);
+    this.preview = new PendulumPreview(document.getElementById('canvasWrapper')!, canvas, this.config);
 
     this.setupControls();
     this.setupZoomControls();
-    this.reset();
+    this.rebuildSimulator();
     this.animate();
   }
 
-  private createPrograms(): void {
-    const compiler = new ShaderCompiler(this.gl);
-    const shaders: Record<ShaderName, string> = {
-      init: initSource,
-      physics: physicsSource,
-      distance: distanceSource,
-      initDivergence: initDivergenceSource,
-      divergence: divergenceSource,
-      render: renderSource,
-      initElastic: initElasticSource,
-      physicsElastic: physicsElasticSource,
-      distanceElastic: distanceElasticSource,
-      initElasticDivergence: initElasticDivergenceSource,
-      divergenceElastic: divergenceElasticSource,
-    };
-
-    for (const [_name, fragment] of Object.entries(shaders)) {
-      const name = _name as ShaderName;
-      const shaderProgram = compiler.linkProgram(vertexSource, fragment, name);
-      const vao = this.vaos.createVAOForProgram(shaderProgram);
-      this.programs[name] = { ...shaderProgram, vao };
+  private rebuildSimulator(): void {
+    if (this.simulator) {
+      this.simulator.dispose();
     }
+    this.simulator = new Simulator(this.gl, this.config, this.quadBuffer.buffer);
+    this.preview.rebuildForConfig(this.config);
+
+    if (this.config.vizMode === 'divergence') {
+      this.simulator.startDivergence(() => this.onDivergenceRender());
+    } else {
+      this.simulator.reset();
+    }
+  }
+
+  private onDivergenceRender(): void {
+    if (this.simulator) {
+      this.renderer.computeMaxValue(this.simulator.getDataTexture());
+    }
+  }
+
+  private onZoomChange(): void {
+    this.ui.updateRangeInputs(this.config);
+    this.rebuildSimulator();
   }
 
   private setupControls(): void {
     this.ui.bindControl('systemType', (v) => {
       this.config.system = v as SimulationConfig['system'];
       this.ui.updateModeUI(this.config);
-      this.reset();
+      this.rebuildSimulator();
     });
 
     this.ui.bindControl('vizMode', (v) => {
       this.config.vizMode = v as SimulationConfig['vizMode'];
       this.ui.updateModeUI(this.config);
-      this.reset();
+      this.rebuildSimulator();
     });
 
     this.ui.bindControl('resolution', (v) => {
       this.config.resolution = parseInt(v) as SimulationConfig['resolution'];
       this.canvas.width = this.config.resolution;
       this.canvas.height = this.config.resolution;
-      this.reset();
+      this.rebuildSimulator();
     }, 'change');
 
     ['theta1Min', 'theta1Max', 'theta2Min', 'theta2Max'].forEach(id => {
@@ -142,20 +105,20 @@ export class ChaosApp {
         else if (id === 'theta2Min') this.config.theta2Range.min = val;
         else if (id === 'theta2Max') this.config.theta2Range.max = val;
         this.zoomController = new ZoomController(this.config, () => this.onZoomChange());
-        this.reset();
+        this.rebuildSimulator();
       }, 'change');
     });
 
     this.ui.bindControl('omega1', (v) => {
       this.config.omega1 = parseFloat(v);
       this.ui.setTextContent('omega1Value', this.config.omega1.toFixed(1));
-      this.reset();
+      this.rebuildSimulator();
     });
 
     this.ui.bindControl('omega2', (v) => {
       this.config.omega2 = parseFloat(v);
       this.ui.setTextContent('omega2Value', this.config.omega2.toFixed(1));
-      this.reset();
+      this.rebuildSimulator();
     });
 
     this.ui.bindControl('dt', (v) => {
@@ -170,25 +133,25 @@ export class ChaosApp {
 
     this.ui.bindControl('maxIter', (v) => {
       this.config.maxIter = parseInt(v);
-      this.reset();
+      this.rebuildSimulator();
     }, 'change');
 
     this.ui.bindControl('dtDiv', (v) => {
       this.config.dt = parseFloat(v);
       this.ui.setTextContent('dtDivValue', this.config.dt.toFixed(3));
-      this.reset();
+      this.rebuildSimulator();
     });
 
     this.ui.bindControl('threshold', (v) => {
       this.config.threshold = parseFloat(v);
       this.ui.setTextContent('thresholdValue', this.config.threshold.toFixed(2));
-      this.reset();
+      this.rebuildSimulator();
     });
 
     this.ui.bindControl('perturb', (v) => {
       this.config.perturb = parseFloat(v);
       this.ui.setTextContent('perturbValue', this.config.perturb.toFixed(6));
-      this.reset();
+      this.rebuildSimulator();
     });
 
     this.ui.bindControl('colormap', (v) => {
@@ -203,7 +166,7 @@ export class ChaosApp {
     this.ui.bindButton('resetBtn', () => {
       this.zoomController.reset();
       this.ui.updateRangeInputs(this.config);
-      this.reset();
+      this.rebuildSimulator();
     });
 
     this.ui.bindButton('downloadBtn', () => this.download());
@@ -211,13 +174,13 @@ export class ChaosApp {
     this.ui.bindControl('k1', (v) => {
       this.config.k1 = parseFloat(v);
       this.ui.setTextContent('k1Value', String(this.config.k1));
-      this.reset();
+      this.rebuildSimulator();
     });
 
     this.ui.bindControl('k2', (v) => {
       this.config.k2 = parseFloat(v);
       this.ui.setTextContent('k2Value', String(this.config.k2));
-      this.reset();
+      this.rebuildSimulator();
     });
 
     this.ui.updateModeUI(this.config);
@@ -233,6 +196,7 @@ export class ChaosApp {
       const x = (e.clientX - rect.left) * (this.canvas.width / rect.width);
       const y = (e.clientY - rect.top) * (this.canvas.height / rect.height);
       this.isDragging = true;
+      this.preview.setDragging(true);
       this.dragStart = { x, y };
       this.dragCurrent = { x, y };
     });
@@ -247,13 +211,14 @@ export class ChaosApp {
       this.updateZoomOverlay();
     });
 
-    this.canvas.addEventListener('mouseup', (_e) => {
+    this.canvas.addEventListener('mouseup', () => {
       if (!this.isDragging) return;
       const dragDist = Math.sqrt((this.dragCurrent!.x - this.dragStart!.x) ** 2 + (this.dragCurrent!.y - this.dragStart!.y) ** 2);
       if (dragDist > 5) {
         this.zoomController.applyRectangle(this.dragStart!.x, this.dragStart!.y, this.dragCurrent!.x, this.dragCurrent!.y, this.canvas.width, this.canvas.height);
       }
       this.isDragging = false;
+      this.preview.setDragging(false);
       this.dragStart = null;
       this.dragCurrent = null;
       overlay.style.display = 'none';
@@ -261,6 +226,7 @@ export class ChaosApp {
 
     this.canvas.addEventListener('mouseleave', () => {
       this.isDragging = false;
+      this.preview.setDragging(false);
       this.dragStart = null;
       this.dragCurrent = null;
       overlay.style.display = 'none';
@@ -292,93 +258,30 @@ export class ChaosApp {
     overlay.style.height = (y2 - y1) + 'px';
   }
 
-  private onZoomChange(): void {
-    this.ui.updateRangeInputs(this.config);
-    this.reset();
-  }
-
-  private onDivergenceComplete(): void {
-    this.renderer.computeMaxValue(this.getCurrentDataTexture());
-  }
-
-  private getCurrentDataTexture(): WebGLTexture {
-    if (this.config.vizMode === 'divergence') {
-      return this.config.system === 'rigid'
-        ? this.divergenceSim.getCurrentDataTexture()
-        : this.elasticDivergenceSim.getCurrentDataTexture();
-    }
-    return this.config.system === 'rigid'
-      ? this.rigidSim.getCurrentDataTexture()
-      : this.elasticSim.getCurrentDataTexture();
-  }
-
-  private getCurrentFrameCount(): number {
-    if (this.config.vizMode === 'divergence') {
-      return this.config.system === 'rigid'
-        ? this.divergenceSim.getFrameCount()
-        : this.elasticDivergenceSim.getFrameCount();
-    }
-    return this.frameCount;
-  }
-
-  reset(): void {
-    this.frameCount = 0;
-    this.divergenceSim.stop();
-    this.elasticDivergenceSim.stop();
-
-    if (this.config.system === 'rigid' && this.config.vizMode === 'distance') {
-      this.rigidSim.reset();
-    } else if (this.config.system === 'rigid' && this.config.vizMode === 'divergence') {
-      this.divergenceSim.start();
-    } else if (this.config.system !== 'rigid' && this.config.vizMode === 'divergence') {
-      this.elasticDivergenceSim.start();
-    } else {
-      this.elasticSim.reset();
-    }
-  }
-
-  private step(): void {
-    if (this.config.vizMode === 'divergence') return;
-
-    if (this.config.system === 'rigid') {
-      this.rigidSim.step();
-    } else {
-      this.elasticSim.step();
-    }
-    this.frameCount += this.config.iterationsPerFrame;
-  }
-
-  private render(): void {
-    const dataTexture = this.getCurrentDataTexture();
-    if (this.config.vizMode !== 'divergence') {
-      this.renderer.computeMaxValue(dataTexture);
-    }
-    this.renderer.render(dataTexture);
-  }
-
-  private updateStats(): void {
-    const isComplete = this.config.vizMode === 'divergence' && this.getCurrentFrameCount() >= this.config.maxIter;
-    this.stats.update(this.config, this.getCurrentFrameCount(), this.renderer.getMaxValue(), isComplete);
-    this.ui.updateStats(
-      this.getCurrentFrameCount(),
-      this.renderer.getMaxValue(),
-      this.stats.getFps(),
-      this.zoomController.level,
-    );
-  }
-
   private animate(): void {
-    this.step();
-    if (this.config.vizMode !== 'divergence' || this.getCurrentFrameCount() < this.config.maxIter) {
-      this.render();
+    if (this.simulator) {
+      const isDiv = this.config.vizMode === 'divergence';
+
+      if (!isDiv) {
+        this.simulator.stepDistance();
+        this.renderer.computeMaxValue(this.simulator.getDataTexture());
+      }
+
+      if (!isDiv || !this.simulator.isComplete()) {
+        this.renderer.render(this.simulator.getDataTexture());
+      }
+
+      const fc = this.simulator.getFrameCount();
+      const isComplete = isDiv && this.simulator.isComplete();
+      this.stats.update(this.config, fc, this.renderer.getMaxValue(), isComplete);
+      this.ui.updateStats(fc, this.renderer.getMaxValue(), this.stats.getFps(), this.zoomController.level);
     }
-    this.updateStats();
     requestAnimationFrame(() => this.animate());
   }
 
   private download(): void {
     const link = document.createElement('a');
-    link.download = `chaos-${this.config.system}-${this.config.vizMode}-frame${this.frameCount}.png`;
+    link.download = `chaos-${this.config.system}-${this.config.vizMode}-frame${this.simulator?.getFrameCount() ?? 0}.png`;
     link.href = this.canvas.toDataURL('image/png');
     link.click();
   }

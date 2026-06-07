@@ -1,14 +1,6 @@
-#version 300 es
-precision highp float;
-uniform sampler2D u_stateTextureA;
-uniform sampler2D u_stateTextureB;
-uniform float u_dt;
-uniform int u_elasticMode;
-uniform float u_k1;
-uniform float u_k2;
-in vec2 v_uv;
-layout(location = 0) out vec4 outStateA;
-layout(location = 1) out vec4 outStateB;
+// Elastic double pendulum ODE right-hand side
+// Requires uniforms: float u_k1, float u_k2, int u_elasticMode
+// Defines: systemDeriv(sa, sb, out da, out db)
 
 const float M1 = 1.0;
 const float M2 = 1.0;
@@ -49,9 +41,9 @@ void systemDerivA(
     float w2sq = omega2 * omega2;
 
     mat3 M;
-    M[0][0] = TOTAL_M * l1sq;  M[0][1] = 0.0;                    M[0][2] = M2 * L20 * l1 * cosD;
-    M[1][0] = 0.0;              M[1][1] = TOTAL_M;                M[1][2] = M2 * L20 * sinD;
-    M[2][0] = M2 * L20 * l1 * cosD; M[2][1] = M2 * L20 * sinD;  M[2][2] = M2 * L2sq;
+    M[0][0] = TOTAL_M * l1sq;       M[0][1] = 0.0;                   M[0][2] = M2 * L20 * l1 * cosD;
+    M[1][0] = 0.0;                   M[1][1] = TOTAL_M;               M[1][2] = M2 * L20 * sinD;
+    M[2][0] = M2 * L20 * l1 * cosD; M[2][1] = M2 * L20 * sinD;      M[2][2] = M2 * L2sq;
 
     vec3 f;
     f.x = -2.0 * TOTAL_M * l1 * rdot1 * omega1
@@ -85,9 +77,9 @@ void systemDerivB(
     float w2sq = omega2 * omega2;
 
     mat3 M;
-    M[0][0] = TOTAL_M * L1sq;      M[0][1] = M2 * L10 * l2 * cosD; M[0][2] = -M2 * L10 * sinD;
-    M[1][0] = M2 * L10 * l2 * cosD; M[1][1] = M2 * l2sq;            M[1][2] = 0.0;
-    M[2][0] = -M2 * L10 * sinD;    M[2][1] = 0.0;                   M[2][2] = M2;
+    M[0][0] = TOTAL_M * L1sq;        M[0][1] = M2 * L10 * l2 * cosD; M[0][2] = -M2 * L10 * sinD;
+    M[1][0] = M2 * L10 * l2 * cosD;  M[1][1] = M2 * l2sq;            M[1][2] = 0.0;
+    M[2][0] = -M2 * L10 * sinD;      M[2][1] = 0.0;                   M[2][2] = M2;
 
     vec3 f;
     f.x = -2.0 * M2 * L10 * rdot2 * omega2 * cosD
@@ -148,10 +140,10 @@ void systemDerivC(
     float w2sq = omega2 * omega2;
 
     mat4 M;
-    M[0][0] = TOTAL_M * l1sq; M[0][1] = 0.0;               M[0][2] = M2 * l1 * l2 * cosD; M[0][3] = -M2 * l1 * sinD;
-    M[1][0] = 0.0;            M[1][1] = TOTAL_M;            M[1][2] = M2 * l2 * sinD;      M[1][3] = M2 * cosD;
-    M[2][0] = M2*l1*l2*cosD;  M[2][1] = M2 * l2 * sinD;    M[2][2] = M2 * l2sq;            M[2][3] = 0.0;
-    M[3][0] = -M2 * l1*sinD;  M[3][1] = M2 * cosD;         M[3][2] = 0.0;                  M[3][3] = M2;
+    M[0][0] = TOTAL_M * l1sq; M[0][1] = 0.0;                M[0][2] = M2 * l1 * l2 * cosD; M[0][3] = -M2 * l1 * sinD;
+    M[1][0] = 0.0;            M[1][1] = TOTAL_M;             M[1][2] = M2 * l2 * sinD;      M[1][3] = M2 * cosD;
+    M[2][0] = M2*l1*l2*cosD;  M[2][1] = M2 * l2 * sinD;     M[2][2] = M2 * l2sq;            M[2][3] = 0.0;
+    M[3][0] = -M2 * l1*sinD;  M[3][1] = M2 * cosD;          M[3][2] = 0.0;                  M[3][3] = M2;
 
     vec4 f;
     f.x = -2.0 * TOTAL_M * l1 * rdot1 * omega1
@@ -178,50 +170,12 @@ void systemDerivC(
     db = vec4(omega2, accel.z, rdot2, accel.w);
 }
 
-void elasticDeriv(int mode, vec4 sa, vec4 sb, out vec4 da, out vec4 db) {
-    if (mode == 0) {
+void systemDeriv(vec4 sa, vec4 sb, out vec4 da, out vec4 db) {
+    if (u_elasticMode == 0) {
         systemDerivA(sa.x, sa.y, sa.z, sa.w, sb.x, sb.y, da, db);
-    } else if (mode == 1) {
+    } else if (u_elasticMode == 1) {
         systemDerivB(sa.x, sa.y, sb.x, sb.y, sb.z, sb.w, da, db);
     } else {
         systemDerivC(sa.x, sa.y, sa.z, sa.w, sb.x, sb.y, sb.z, sb.w, da, db);
-    }
-}
-
-void main() {
-    vec4 sa = texture(u_stateTextureA, v_uv);
-    vec4 sb = texture(u_stateTextureB, v_uv);
-
-    vec4 ca, cb;
-    if (u_elasticMode == 0) {
-        ca = sa;
-        cb = vec4(sb.x, sb.y, 0.0, 0.0);
-    } else if (u_elasticMode == 1) {
-        ca = vec4(sa.x, sa.y, 0.0, 0.0);
-        cb = vec4(sa.z, sa.w, sb.x, sb.y);
-    } else {
-        ca = sa;
-        cb = sb;
-    }
-
-    float dt = u_dt;
-    vec4 da1, db1, da2, db2, da3, db3, da4, db4;
-    elasticDeriv(u_elasticMode, ca, cb, da1, db1);
-    elasticDeriv(u_elasticMode, ca + 0.5*dt*da1, cb + 0.5*dt*db1, da2, db2);
-    elasticDeriv(u_elasticMode, ca + 0.5*dt*da2, cb + 0.5*dt*db2, da3, db3);
-    elasticDeriv(u_elasticMode, ca + dt*da3, cb + dt*db3, da4, db4);
-
-    vec4 newCA = ca + (dt / 6.0) * (da1 + 2.0*da2 + 2.0*da3 + da4);
-    vec4 newCB = cb + (dt / 6.0) * (db1 + 2.0*db2 + 2.0*db3 + db4);
-
-    if (u_elasticMode == 0) {
-        outStateA = newCA;
-        outStateB = vec4(newCB.x, newCB.y, 0.0, 1.0);
-    } else if (u_elasticMode == 1) {
-        outStateA = vec4(newCA.x, newCA.y, newCB.x, newCB.y);
-        outStateB = vec4(newCB.z, newCB.w, 0.0, 1.0);
-    } else {
-        outStateA = newCA;
-        outStateB = newCB;
     }
 }

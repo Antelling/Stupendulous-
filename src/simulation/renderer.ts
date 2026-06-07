@@ -1,32 +1,52 @@
 import type { SimulationConfig } from '../types/config.ts';
 import { TextureManager } from '../webgl/textureManager.ts';
 import { UniformSetter } from '../webgl/uniformSetter.ts';
-import type { ShaderProgram } from '../types/shaders.ts';
+import { ShaderCompiler } from '../webgl/shaderCompiler.ts';
+
+import vertexSource from '../shaders/vertex.glsl?raw';
+import renderSource from '../shaders/render.glsl?raw';
 
 export class Renderer {
   private maxValue = 0;
+  private program: WebGLProgram;
+  private vao: WebGLVertexArrayObject;
 
   constructor(
     private readonly gl: WebGL2RenderingContext,
     private readonly config: SimulationConfig,
     private readonly textures: TextureManager,
     private readonly uniforms: UniformSetter,
-    private readonly programs: Record<string, ShaderProgram>,
-  ) {}
+    quadBuffer: WebGLBuffer,
+  ) {
+    const compiler = new ShaderCompiler(gl);
+    const sp = compiler.linkProgram(vertexSource, renderSource, 'render');
+
+    this.vao = gl.createVertexArray()!;
+    gl.bindVertexArray(this.vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+    const posLoc = gl.getAttribLocation(sp.program, 'a_position');
+    if (posLoc >= 0) {
+      gl.enableVertexAttribArray(posLoc);
+      gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+    }
+    gl.bindVertexArray(null);
+
+    this.program = sp.program;
+  }
 
   render(dataTexture: WebGLTexture): void {
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.config.resolution, this.config.resolution);
 
-    gl.useProgram(this.programs.render.program);
-    gl.bindVertexArray(this.programs.render.vao);
+    gl.useProgram(this.program);
+    gl.bindVertexArray(this.vao);
     this.textures.bindTexture(0, dataTexture);
-    this.uniforms.set1i(this.programs.render.program, 'u_dataTexture', 0);
-    this.uniforms.set1i(this.programs.render.program, 'u_colormap', this.config.colormap);
-    this.uniforms.set1i(this.programs.render.program, 'u_toneMapping', this.config.toneMapping);
-    this.uniforms.set1f(this.programs.render.program, 'u_maxValue', this.maxValue || 1);
-    this.uniforms.set1b(this.programs.render.program, 'u_isDivergenceMode', this.config.vizMode === 'divergence');
+    this.uniforms.set1i(this.program, 'u_dataTexture', 0);
+    this.uniforms.set1i(this.program, 'u_colormap', this.config.colormap);
+    this.uniforms.set1i(this.program, 'u_toneMapping', this.config.toneMapping);
+    this.uniforms.set1f(this.program, 'u_maxValue', this.maxValue || 1);
+    this.uniforms.set1b(this.program, 'u_isDivergenceMode', this.config.vizMode === 'divergence');
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);
@@ -55,6 +75,7 @@ export class Renderer {
 
     this.maxValue = maxVal;
     gl.deleteFramebuffer(tempFb);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
   getMaxValue(): number {
