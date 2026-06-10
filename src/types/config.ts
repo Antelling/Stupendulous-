@@ -1,27 +1,44 @@
-export type SystemType = 'rigid' | 'elastic1' | 'elastic2' | 'elastic12';
+export type SystemType = 'rigid' | 'elastic12' | 'nonlinear';
 export type VizMode = 'distance' | 'divergence';
 export type Colormap = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export type ToneMapping = 0 | 1 | 2 | 3;
 export type Resolution = 256 | 512 | 1024;
 
-export interface Range {
+export type PhaseSpaceDimension =
+  | 'angle1'
+  | 'velocity1'
+  | 'angle2'
+  | 'velocity2'
+  | 'stretch1'
+  | 'stretchRate1'
+  | 'stretch2'
+  | 'stretchRate2';
+
+export interface PhaseSpaceAxis {
+  dimension: PhaseSpaceDimension;
   min: number;
   max: number;
+}
+
+export interface PhaseSpaceConfig {
+  x: PhaseSpaceAxis;
+  y: PhaseSpaceAxis;
+  initialValues: Record<PhaseSpaceDimension, number>;
 }
 
 export interface SimulationConfig {
   system: SystemType;
   vizMode: VizMode;
   resolution: Resolution;
-  theta1Range: Range;
-  theta2Range: Range;
-  omega1: number;
-  omega2: number;
+  phaseSpace: PhaseSpaceConfig;
   dt: number;
   iterationsPerFrame: number;
   maxIter: number;
-  threshold: number;
   perturb: number;
+  m1: number;
+  m2: number;
+  L1: number;
+  L2: number;
   k1: number;
   k2: number;
   colormap: Colormap;
@@ -30,7 +47,7 @@ export interface SimulationConfig {
 }
 
 export interface ZoomState {
-  history: Array<{ theta1: Range; theta2: Range }>;
+  history: Array<{ x: PhaseSpaceAxis; y: PhaseSpaceAxis }>;
 }
 
 export interface SimulationState {
@@ -46,19 +63,63 @@ export interface DragState {
   current: { x: number; y: number } | null;
 }
 
+export const RIGID_DIMENSIONS: PhaseSpaceDimension[] = [
+  'angle1', 'velocity1', 'angle2', 'velocity2',
+];
+
+export const ELASTIC_DIMENSIONS: PhaseSpaceDimension[] = [
+  'angle1', 'velocity1', 'stretch1', 'stretchRate1',
+  'angle2', 'velocity2', 'stretch2', 'stretchRate2',
+];
+
+export const DIMENSION_LABELS: Record<PhaseSpaceDimension, string> = {
+  angle1: 'First Angle θ₁',
+  velocity1: 'First Angular Velocity ω₁',
+  angle2: 'Second Angle θ₂',
+  velocity2: 'Second Angular Velocity ω₂',
+  stretch1: 'First Arm Stretch r₁',
+  stretchRate1: 'First Stretch Rate ṙ₁',
+  stretch2: 'Second Arm Stretch r₂',
+  stretchRate2: 'Second Stretch Rate ṙ₂',
+};
+
+export const DIMENSION_DEFAULTS: Record<PhaseSpaceDimension, { min: number; max: number; initial: number }> = {
+  angle1: { min: -Math.PI, max: Math.PI, initial: 0 },
+  velocity1: { min: -5, max: 5, initial: 0 },
+  angle2: { min: -Math.PI, max: Math.PI, initial: 0 },
+  velocity2: { min: -5, max: 5, initial: 0 },
+  stretch1: { min: -0.5, max: 0.5, initial: 0 },
+  stretchRate1: { min: -5, max: 5, initial: 0 },
+  stretch2: { min: -0.5, max: 0.5, initial: 0 },
+  stretchRate2: { min: -5, max: 5, initial: 0 },
+};
+
 export const DEFAULT_CONFIG: SimulationConfig = {
   system: 'rigid',
   vizMode: 'distance',
   resolution: 512,
-  theta1Range: { min: -3.14, max: 3.14 },
-  theta2Range: { min: -3.14, max: 3.14 },
-  omega1: 0,
-  omega2: 0,
+  phaseSpace: {
+    x: { dimension: 'angle1', min: -Math.PI, max: Math.PI },
+    y: { dimension: 'angle2', min: -Math.PI, max: Math.PI },
+    initialValues: {
+      angle1: 0,
+      velocity1: 0,
+      angle2: 0,
+      velocity2: 0,
+      stretch1: 0,
+      stretchRate1: 0,
+      stretch2: 0,
+      stretchRate2: 0,
+    },
+  },
   dt: 0.002,
   iterationsPerFrame: 10,
   maxIter: 5000,
-  threshold: 0.05,
   perturb: 0.00001,
+  m1: 1,
+  m2: 1,
+  L1: 1,
+  L2: 1,
   k1: 50,
   k2: 50,
   colormap: 6,
@@ -68,9 +129,8 @@ export const DEFAULT_CONFIG: SimulationConfig = {
 
 export const SYSTEM_NAMES: Record<SystemType, string> = {
   rigid: 'Rigid',
-  elastic1: 'Elastic Arm 1',
-  elastic2: 'Elastic Arm 2',
-  elastic12: 'Both Elastic',
+  elastic12: 'Elastic Double Pendulum',
+  nonlinear: 'Nonlinear Elastic Pendulum',
 };
 
 export const MODE_NAMES: Record<VizMode, string> = {

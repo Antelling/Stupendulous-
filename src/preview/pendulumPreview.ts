@@ -1,19 +1,36 @@
-import type { SimulationConfig } from '../types/config.ts';
+import type { SimulationConfig, PhaseSpaceDimension } from '../types/config.ts';
 import { ShaderCompiler } from '../webgl/shaderCompiler.ts';
 import { ShaderBuilder } from '../webgl/shaderBuilder.ts';
+import { FrequencyAnalyzer } from './frequencyAnalyzer.ts';
+import { PhaseSpaceGraph } from './phaseSpaceGraph.ts';
 import vertexSource from '../shaders/vertex.glsl?raw';
 
-type SystemKey = 'rigid' | 'elastic';
+type SystemKey = 'rigid' | 'elastic' | 'nonlinear';
 
 interface CompiledProg {
   program: WebGLProgram;
   vao: WebGLVertexArrayObject;
 }
 
+const DIM_INDEX: Record<PhaseSpaceDimension, number> = {
+  angle1: 0,
+  velocity1: 1,
+  stretch1: 2,
+  stretchRate1: 3,
+  angle2: 4,
+  velocity2: 5,
+  stretch2: 6,
+  stretchRate2: 7,
+};
+
 export class PendulumPreview {
   private gl: WebGL2RenderingContext;
   private ctx: CanvasRenderingContext2D;
+  private graphCtx: CanvasRenderingContext2D;
+  private poincareCtx: CanvasRenderingContext2D;
   private drawCanvas: HTMLCanvasElement;
+  private graphCanvas: HTMLCanvasElement;
+  private poincareCanvas: HTMLCanvasElement;
   private config: SimulationConfig;
   private systemKey: SystemKey;
   private quadBuf: WebGLBuffer;
@@ -41,28 +58,42 @@ export class PendulumPreview {
   private pertSA = new Float32Array(4);
   private pertSB: Float32Array | null = null;
 
-  private readonly boxMargin = 16;
-  private readonly boxSize = 170;
-  private readonly armScale = 55;
+  private readonly boxMargin = 0;
+  private readonly boxSize = 500;
+  private readonly armScale = 110;
+
+  private freqAnalyzer: FrequencyAnalyzer;
+  private lastAnalysis: { isPeriodic: boolean; period: number | null; confidence: number } | null = null;
+  private analysisFrameSkip = 0;
+
+  private phaseSpaceGraph: PhaseSpaceGraph;
+  private previewEnabled = false;
+  private previewBtn: HTMLButtonElement;
+  private previewStatus: HTMLElement;
 
   constructor(
     frameEl: HTMLElement,
     private mainCanvas: HTMLCanvasElement,
+    gl: WebGL2RenderingContext,
     config: SimulationConfig,
   ) {
     this.config = config;
-    this.systemKey = config.system === 'rigid' ? 'rigid' : 'elastic';
+    this.systemKey = config.system === 'rigid' ? 'rigid' : (config.system === 'nonlinear' ? 'nonlinear' : 'elastic');
 
-    const simCanvas = document.createElement('canvas');
-    simCanvas.width = 1;
-    simCanvas.height = 1;
-    const gl = simCanvas.getContext('webgl2', { antialias: false })!;
     this.gl = gl;
-    gl.getExtension('EXT_color_buffer_float');
 
     this.drawCanvas = document.getElementById('previewCanvas') as HTMLCanvasElement;
     this.ctx = this.drawCanvas.getContext('2d')!;
+    this.graphCanvas = document.getElementById('graphCanvas') as HTMLCanvasElement;
+    this.graphCtx = this.graphCanvas.getContext('2d')!;
+    this.poincareCanvas = document.getElementById('poincareCanvas') as HTMLCanvasElement;
+    this.poincareCtx = this.poincareCanvas.getContext('2d')!;
+    this.phaseSpaceGraph = new PhaseSpaceGraph(this.graphCanvas, this.poincareCanvas, 1000);
     this.syncSize();
+
+    this.previewBtn = document.getElementById('previewToggleBtn') as HTMLButtonElement;
+    this.previewStatus = document.getElementById('previewStatus') as HTMLElement;
+    this.previewBtn.addEventListener('click', () => this.togglePreview());
 
     this.quadBuf = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuf);
@@ -72,7 +103,7 @@ export class PendulumPreview {
 
     this.baseAPair = this.makePair();
     this.pertAPair = this.makePair();
-    if (this.systemKey === 'elastic') {
+    if (this.systemKey === 'elastic' || this.systemKey === 'nonlinear') {
       this.baseBPair = this.makePair();
       this.pertBPair = this.makePair();
       this.baseSB = new Float32Array(4);
@@ -82,19 +113,43 @@ export class PendulumPreview {
     this.initProg = this.buildProg(ShaderBuilder.buildPreviewInit(this.systemKey));
     this.physicsProg = this.buildProg(ShaderBuilder.buildPreviewPhysicsLoop(this.systemKey));
 
-    this.mainCanvas.addEventListener('mousemove', (e) => {
-      const rect = this.mainCanvas.getBoundingClientRect();
-      const px = (e.clientX - rect.left) * (this.mainCanvas.width / rect.width);
-      const py = (e.clientY - rect.top) * (this.mainCanvas.height / rect.height);
-      this.onHover(px, py);
+    this.freqAnalyzer = new FrequencyAnalyzer(2048, this.config.dt, 15);
+
+    this.mainCanvas.addEventListener('click', (e) => {
+      if (this.previewEnabled) {
+        const rect = this.mainCanvas.getBoundingClientRect();
+        const px = (e.clientX - rect.left) * (this.mainCanvas.width / rect.width);
+        const py = (e.clientY - rect.top) * (this.mainCanvas.height / rect.height);
+        this.onClick(px, py);
+      }
     });
-    this.mainCanvas.addEventListener('mouseleave', () => this.onLeave());
+
     new ResizeObserver(() => this.syncSize()).observe(frameEl);
   }
 
   private syncSize() {
-    this.drawCanvas.width = this.mainCanvas.width;
-    this.drawCanvas.height = this.mainCanvas.height;
+    const size = this.boxSize + 2 * this.boxMargin;
+    this.drawCanvas.width = size;
+    this.drawCanvas.height = 500;
+    this.graphCanvas.width = size;
+    this.graphCanvas.height = 200;
+    this.phaseSpaceGraph.resize(size, 200);
+  }
+
+  private togglePreview() {
+    this.previewEnabled = !this.previewEnabled;
+    if (this.previewEnabled) {
+      this.previewBtn.textContent = '✕ Stop';
+      this.previewBtn.style.background = '#3a2020';
+      this.previewStatus.textContent = 'Click on the main canvas to start simulation';
+      this.previewStatus.style.color = '#888';
+    } else {
+      this.previewBtn.textContent = '▶ Start';
+      this.previewBtn.style.background = '';
+      this.previewStatus.textContent = 'Click "Start" then click on the main canvas';
+      this.previewStatus.style.color = '#666';
+      this.onLeave();
+    }
   }
 
   private makeTex(): WebGLTexture {
@@ -149,28 +204,25 @@ export class PendulumPreview {
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fb);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    for (let i = 1; i < 5; i++) {
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, null, 0);
+    }
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+    gl.readBuffer(gl.COLOR_ATTACHMENT0);
     gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, out);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  }
-
-  private getElasticMode(): number {
-    switch (this.config.system) {
-      case 'elastic1': return 0;
-      case 'elastic2': return 1;
-      case 'elastic12': return 2;
-      default: return 0;
-    }
   }
 
   setDragging(v: boolean) {
     if (v) this.onLeave();
   }
 
-  private onHover(px: number, py: number) {
+  private onClick(px: number, py: number) {
     const nx = px / this.mainCanvas.width;
     const ny = 1 - py / this.mainCanvas.height;
-    const t1 = this.config.theta1Range.min + nx * (this.config.theta1Range.max - this.config.theta1Range.min);
-    const t2 = this.config.theta2Range.min + ny * (this.config.theta2Range.max - this.config.theta2Range.min);
+
+    const dx = this.config.phaseSpace.x.min + nx * (this.config.phaseSpace.x.max - this.config.phaseSpace.x.min);
+    const dy = this.config.phaseSpace.y.min + ny * (this.config.phaseSpace.y.max - this.config.phaseSpace.y.min);
 
     this.active = true;
     this.simulating = false;
@@ -178,17 +230,24 @@ export class PendulumPreview {
     this.trail = [];
     this.diverged = false;
     this.readIdx = 0;
+    this.freqAnalyzer.reset();
+    this.lastAnalysis = null;
+    this.analysisFrameSkip = 0;
+    this.phaseSpaceGraph.reset();
 
-    this.gpuInit(t1, t2);
+    this.gpuInit(dx, dy);
     this.readStates();
     this.trail.push(this.bob2(this.baseSA, this.baseSB));
     this.drawFrame();
+
+    this.previewStatus.textContent = 'Simulating...';
+    this.previewStatus.style.color = '#0d4';
 
     clearTimeout(this.debounceTimer ?? undefined);
     this.debounceTimer = window.setTimeout(() => {
       this.simulating = true;
       this.loop();
-    }, 300);
+    }, 100);
   }
 
   private onLeave() {
@@ -197,6 +256,11 @@ export class PendulumPreview {
     this.stopAnim();
     clearTimeout(this.debounceTimer ?? undefined);
     this.ctx.clearRect(0, 0, this.drawCanvas.width, this.drawCanvas.height);
+    this.graphCtx.clearRect(0, 0, this.graphCanvas.width, this.graphCanvas.height);
+    if (this.previewEnabled) {
+      this.previewStatus.textContent = 'Click on the main canvas to start simulation';
+      this.previewStatus.style.color = '#888';
+    }
   }
 
   private stopAnim() {
@@ -206,21 +270,41 @@ export class PendulumPreview {
     }
   }
 
-  private gpuInit(t1: number, t2: number) {
+  private gpuInit(dx: number, dy: number) {
     const gl = this.gl;
     const p = this.use(this.initProg);
-    gl.uniform1f(this.u(p, 'u_theta1'), t1);
-    gl.uniform1f(this.u(p, 'u_theta2'), t2);
-    gl.uniform1f(this.u(p, 'u_omega1'), this.config.omega1);
-    gl.uniform1f(this.u(p, 'u_omega2'), this.config.omega2);
+    const iv = this.config.phaseSpace.initialValues;
+
+    if (this.systemKey === 'rigid') {
+      const state = [iv.angle1, iv.velocity1, iv.angle2, iv.velocity2];
+      const xDim = DIM_INDEX[this.config.phaseSpace.x.dimension];
+      const yDim = DIM_INDEX[this.config.phaseSpace.y.dimension];
+      // rigid state layout: (angle1, velocity1, angle2, velocity2)
+      // map elastic-style indices to rigid layout
+      const rigidIndex = (dim: number) => dim === 0 ? 0 : dim === 1 ? 1 : dim === 4 ? 2 : dim === 5 ? 3 : -1;
+      const xi = rigidIndex(xDim);
+      const yi = rigidIndex(yDim);
+      if (xi >= 0) state[xi] += dx;
+      if (yi >= 0) state[yi] += dy;
+      gl.uniform4f(this.u(p, 'u_initialState'), state[0], state[1], state[2], state[3]);
+    } else {
+      const a = [iv.angle1, iv.velocity1, iv.stretch1, iv.stretchRate1];
+      const b = [iv.angle2, iv.velocity2, iv.stretch2, iv.stretchRate2];
+      const xDim = DIM_INDEX[this.config.phaseSpace.x.dimension];
+      const yDim = DIM_INDEX[this.config.phaseSpace.y.dimension];
+      if (xDim < 4) a[xDim] += dx; else b[xDim - 4] += dx;
+      if (yDim < 4) a[yDim] += dy; else b[yDim - 4] += dy;
+      gl.uniform4f(this.u(p, 'u_initialA'), a[0], a[1], a[2], a[3]);
+      gl.uniform4f(this.u(p, 'u_initialB'), b[0], b[1], b[2], b[3]);
+    }
+
     gl.uniform1f(this.u(p, 'u_perturb'), this.config.perturb);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fb);
     for (let i = 0; i < 5; i++) {
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, null, 0);
     }
-    if (this.systemKey === 'elastic') {
-      gl.uniform1i(this.u(p, 'u_elasticMode'), this.getElasticMode());
+    if (this.systemKey === 'elastic' || this.systemKey === 'nonlinear') {
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.baseAPair[0], 0);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, this.baseBPair![0], 0);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT2, gl.TEXTURE_2D, this.pertAPair[0], 0);
@@ -249,20 +333,27 @@ export class PendulumPreview {
     for (let i = 0; i < 5; i++) {
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, null, 0);
     }
-    if (this.systemKey === 'elastic') {
+    if (this.systemKey === 'elastic' || this.systemKey === 'nonlinear') {
       this.bind(0, sAPair[r]);
       this.bind(1, sBPair![r]);
       gl.uniform1i(this.u(p, 'u_stateTextureA'), 0);
       gl.uniform1i(this.u(p, 'u_stateTextureB'), 1);
-      gl.uniform1i(this.u(p, 'u_elasticMode'), this.getElasticMode());
       gl.uniform1f(this.u(p, 'u_k1'), this.config.k1);
       gl.uniform1f(this.u(p, 'u_k2'), this.config.k2);
+      gl.uniform1f(this.u(p, 'u_m1'), this.config.m1);
+      gl.uniform1f(this.u(p, 'u_m2'), this.config.m2);
+      gl.uniform1f(this.u(p, 'u_L1'), this.config.L1);
+      gl.uniform1f(this.u(p, 'u_L2'), this.config.L2);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sAPair[w], 0);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, sBPair![w], 0);
       gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
     } else {
       this.bind(0, sAPair[r]);
       gl.uniform1i(this.u(p, 'u_stateTexture'), 0);
+      gl.uniform1f(this.u(p, 'u_m1'), this.config.m1);
+      gl.uniform1f(this.u(p, 'u_m2'), this.config.m2);
+      gl.uniform1f(this.u(p, 'u_L1'), this.config.L1);
+      gl.uniform1f(this.u(p, 'u_L2'), this.config.L2);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sAPair[w], 0);
       gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
     }
@@ -276,7 +367,7 @@ export class PendulumPreview {
     const r = this.readIdx;
     this.readTex(this.baseAPair[r], this.baseSA);
     this.readTex(this.pertAPair[r], this.pertSA);
-    if (this.systemKey === 'elastic') {
+    if (this.systemKey === 'elastic' || this.systemKey === 'nonlinear') {
       this.readTex(this.baseBPair![r], this.baseSB!);
       this.readTex(this.pertBPair![r], this.pertSB!);
     }
@@ -284,12 +375,9 @@ export class PendulumPreview {
 
   private decodeAngles(sA: Float32Array, sB: Float32Array | null): { t1: number; t2: number; l1: number; l2: number } {
     if (this.systemKey === 'rigid') {
-      return { t1: sA[0], t2: sA[2], l1: 1, l2: 1 };
+      return { t1: sA[0], t2: sA[2], l1: this.config.L1, l2: this.config.L2 };
     }
-    const m = this.getElasticMode();
-    if (m === 0) return { t1: sA[0], t2: sB![0], l1: 1 + sA[2], l2: 1 };
-    if (m === 1) return { t1: sA[0], t2: sA[2], l1: 1, l2: 1 + sB![0] };
-    return { t1: sA[0], t2: sB![0], l1: 1 + sA[2], l2: 1 + sB![2] };
+    return { t1: sA[0], t2: sB![0], l1: this.config.L1 + sA[2], l2: this.config.L2 + sB![2] };
   }
 
   private bob2(sA: Float32Array, sB: Float32Array | null): { x: number; y: number } {
@@ -297,6 +385,48 @@ export class PendulumPreview {
     const x1 = l1 * Math.sin(t1);
     const y1 = -l1 * Math.cos(t1);
     return { x: x1 + l2 * Math.sin(t2), y: y1 - l2 * Math.cos(t2) };
+  }
+
+  private calculateEnergies(sA: Float32Array, sB: Float32Array | null): { ke: number; pe: number; ee: number } {
+    const { t1, t2, l1, l2 } = this.decodeAngles(sA, sB);
+    const w1 = sA[1];
+    const w2 = this.systemKey === 'rigid' ? sA[3] : sB![1];
+
+    const x1 = l1 * Math.sin(t1);
+    const y1 = -l1 * Math.cos(t1);
+    const x2 = x1 + l2 * Math.sin(t2);
+    const y2 = y1 - l2 * Math.cos(t2);
+
+    const vx1 = l1 * w1 * Math.cos(t1);
+    const vy1 = l1 * w1 * Math.sin(t1);
+    const vx2 = vx1 + l2 * w2 * Math.cos(t2);
+    const vy2 = vy1 + l2 * w2 * Math.sin(t2);
+
+    const ke = 0.5 * this.config.m1 * (vx1 * vx1 + vy1 * vy1) + 
+               0.5 * this.config.m2 * (vx2 * vx2 + vy2 * vy2);
+
+    const g = 9.81;
+    const pe = this.config.m1 * g * y1 + this.config.m2 * g * y2;
+
+    let ee = 0;
+    if (this.systemKey === 'elastic' || this.systemKey === 'nonlinear') {
+      const dl1 = sA[2];
+      const dl2 = sB![2];
+      
+      if (this.systemKey === 'nonlinear') {
+        const L10 = this.config.L1;
+        const L20 = this.config.L2;
+        const absDl1 = Math.abs(dl1);
+        const absDl2 = Math.abs(dl2);
+        const ee1 = this.config.k1 * L10 * (Math.exp(absDl1 / L10) - 1 - absDl1 / L10);
+        const ee2 = this.config.k2 * L20 * (Math.exp(absDl2 / L20) - 1 - absDl2 / L20);
+        ee = ee1 + ee2;
+      } else {
+        ee = 0.5 * this.config.k1 * dl1 * dl1 + 0.5 * this.config.k2 * dl2 * dl2;
+      }
+    }
+
+    return { ke, pe, ee };
   }
 
   private checkDivergence(): boolean {
@@ -310,17 +440,10 @@ export class PendulumPreview {
     if (this.systemKey === 'rigid') {
       sq += cd(bA[2], pA[2]) ** 2 + (bA[3] - pA[3]) ** 2;
     } else {
-      const m = this.getElasticMode();
       const bB = this.baseSB!, pB = this.pertSB!;
-      if (m === 0) {
-        sq += cd(bB[0], pB[0]) ** 2 + (bB[1] - pB[1]) ** 2 + (bA[2] - pA[2]) ** 2 + (bA[3] - pA[3]) ** 2;
-      } else if (m === 1) {
-        sq += cd(bA[2], pA[2]) ** 2 + (bA[3] - pA[3]) ** 2 + (bB[0] - pB[0]) ** 2 + (bB[1] - pB[1]) ** 2;
-      } else {
-        sq += cd(bB[0], pB[0]) ** 2 + (bB[1] - pB[1]) ** 2 + (bA[2] - pA[2]) ** 2 + (bA[3] - pA[3]) ** 2 + (bB[2] - pB[2]) ** 2 + (bB[3] - pB[3]) ** 2;
-      }
+      sq += cd(bB[0], pB[0]) ** 2 + (bB[1] - pB[1]) ** 2 + (bA[2] - pA[2]) ** 2 + (bA[3] - pA[3]) ** 2 + (bB[2] - pB[2]) ** 2 + (bB[3] - pB[3]) ** 2;
     }
-    return Math.sqrt(sq) > this.config.threshold;
+    return Math.sqrt(sq) > 0.05;
   }
 
   private loop() {
@@ -335,8 +458,25 @@ export class PendulumPreview {
     if (!this.diverged && this.checkDivergence()) {
       this.diverged = true;
     }
+
+    // Always add to phase space graph and poincare section, even after divergence
+    // Wrap angles to [-π, π] for display
+    const wrapAngle = (a: number) => {
+      const PI = Math.PI;
+      return a - 2 * PI * Math.floor((a + PI) / (2 * PI));
+    };
+    const t1 = wrapAngle(this.baseSA[0]);
+    const w1 = this.baseSA[1];
+    const t2 = wrapAngle(this.systemKey === 'rigid' ? this.baseSA[2] : this.baseSB![0]);
+    const w2 = this.systemKey === 'rigid' ? this.baseSA[3] : this.baseSB![1];
+    const energies = this.calculateEnergies(this.baseSA, this.baseSB);
+
+    this.phaseSpaceGraph.addPoint(t1, w1, t2, w2, energies.ke, energies.pe, energies.ee);
+
+    // Only add to trail if not diverged
     if (!this.diverged) {
-      this.trail.push(this.bob2(this.baseSA, this.baseSB));
+      const pos = this.bob2(this.baseSA, this.baseSB);
+      this.trail.push(pos);
     }
 
     this.drawFrame();
@@ -350,34 +490,18 @@ export class PendulumPreview {
     ctx.clearRect(0, 0, cw, ch);
     if (!this.active) return;
 
-    const m = this.boxMargin;
     const bs = this.boxSize;
-    const sc = this.armScale;
-    const bx = m;
-    const by = ch - m - bs;
-    const cx = bx + bs / 2;
-    const cy = by + bs / 2;
+    const maxReach = (this.trail.length > 0
+      ? Math.max(...this.trail.map(p => Math.max(Math.abs(p.x), Math.abs(p.y))))
+      : 2) * 1.15;
+    const sc = Math.min(this.armScale, (bs / 2 - 20) / maxReach);
+    const cx = bs / 2;
+    const cy = ch / 2;
     const tc = (x: number, y: number) => ({ px: cx + x * sc, py: cy - y * sc });
 
     ctx.save();
-    ctx.beginPath();
-    const r = 10;
-    ctx.moveTo(bx + r, by);
-    ctx.arcTo(bx + bs, by, bx + bs, by + bs, r);
-    ctx.arcTo(bx + bs, by + bs, bx, by + bs, r);
-    ctx.arcTo(bx, by + bs, bx, by, r);
-    ctx.arcTo(bx, by, bx + bs, by, r);
-    ctx.closePath();
     ctx.fillStyle = this.diverged ? 'rgba(40, 20, 8, 0.88)' : 'rgba(8, 10, 16, 0.88)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(bx, by, bs, bs);
-    ctx.clip();
+    ctx.fillRect(0, 0, cw, ch);
 
     if (this.trail.length > 1) {
       ctx.beginPath();
@@ -410,8 +534,10 @@ export class PendulumPreview {
     const pp0 = tc(0, 0), pp1 = tc(px1, py1), pp2 = tc(px2, py2);
     ctx.beginPath(); ctx.moveTo(pp0.px, pp0.py); ctx.lineTo(pp1.px, pp1.py); ctx.lineTo(pp2.px, pp2.py);
     ctx.strokeStyle = 'rgba(232, 160, 48, 0.35)'; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.beginPath(); ctx.arc(pp1.px, pp1.py, 2.5, 0, Math.PI * 2); ctx.fillStyle = 'rgba(232, 160, 48, 0.3)'; ctx.fill();
-    ctx.beginPath(); ctx.arc(pp2.px, pp2.py, 3, 0, Math.PI * 2); ctx.fillStyle = 'rgba(232, 160, 48, 0.4)'; ctx.fill();
+    const bobRadius1 = 2 + this.config.m1 * 2;
+    const bobRadius2 = 2.5 + this.config.m2 * 2.5;
+    ctx.beginPath(); ctx.arc(pp1.px, pp1.py, bobRadius1 * 0.7, 0, Math.PI * 2); ctx.fillStyle = 'rgba(232, 160, 48, 0.3)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(pp2.px, pp2.py, bobRadius2 * 0.7, 0, Math.PI * 2); ctx.fillStyle = 'rgba(232, 160, 48, 0.4)'; ctx.fill();
 
     const bp0 = tc(0, 0), bp1 = tc(bx1, by1), bp2 = tc(bx2, by2);
     ctx.beginPath(); ctx.moveTo(bp0.px, bp0.py); ctx.lineTo(bp1.px, bp1.py);
@@ -419,38 +545,59 @@ export class PendulumPreview {
     ctx.beginPath(); ctx.moveTo(bp1.px, bp1.py); ctx.lineTo(bp2.px, bp2.py);
     ctx.strokeStyle = 'rgba(0, 212, 170, 0.7)'; ctx.lineWidth = 2; ctx.stroke();
 
-    ctx.beginPath(); ctx.arc(bp1.px, bp1.py, 3.5, 0, Math.PI * 2); ctx.fillStyle = 'rgba(200, 202, 212, 0.5)'; ctx.fill();
-    ctx.beginPath(); ctx.arc(bp2.px, bp2.py, 4.5, 0, Math.PI * 2); ctx.fillStyle = '#00d4aa'; ctx.fill();
+    ctx.beginPath(); ctx.arc(bp1.px, bp1.py, bobRadius1, 0, Math.PI * 2); ctx.fillStyle = 'rgba(200, 202, 212, 0.5)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(bp2.px, bp2.py, bobRadius2, 0, Math.PI * 2); ctx.fillStyle = '#00d4aa'; ctx.fill();
     ctx.shadowColor = 'rgba(0, 212, 170, 0.5)'; ctx.shadowBlur = 8; ctx.fill(); ctx.shadowBlur = 0;
     ctx.beginPath(); ctx.arc(bp0.px, bp0.py, 2.5, 0, Math.PI * 2); ctx.fillStyle = 'rgba(200, 202, 212, 0.4)'; ctx.fill();
 
-    ctx.restore();
-
-    ctx.font = '500 10px "IBM Plex Mono", monospace';
+    ctx.font = '500 10px monospace';
     ctx.fillStyle = 'rgba(200, 202, 212, 0.7)';
     ctx.textAlign = 'left';
-    if (this.systemKey === 'elastic') {
-      ctx.fillText(`l\u2081 ${baseD.l1.toFixed(2)}  l\u2082 ${baseD.l2.toFixed(2)}`, bx + 8, by + bs - 32);
+    if (this.systemKey === 'elastic' || this.systemKey === 'nonlinear') {
+      ctx.fillText(`l₁ ${baseD.l1.toFixed(2)}  l₂ ${baseD.l2.toFixed(2)}`, 8, ch - 32);
     }
-    ctx.fillText(`\u03b8\u2081 ${baseD.t1.toFixed(2)}`, bx + 8, by + bs - 20);
-    ctx.fillText(`\u03b8\u2082 ${baseD.t2.toFixed(2)}`, bx + 8, by + bs - 8);
+    ctx.fillText(`θ₁ ${baseD.t1.toFixed(2)}`, 8, ch - 20);
+    ctx.fillText(`θ₂ ${baseD.t2.toFixed(2)}`, 8, ch - 8);
 
     if (this.diverged) {
-      ctx.font = '600 9px "IBM Plex Mono", monospace';
+      ctx.font = '600 9px monospace';
       ctx.fillStyle = 'rgba(232, 160, 48, 0.9)';
       ctx.textAlign = 'right';
-      ctx.fillText('DIVERGED', bx + bs - 6, by + bs - 8);
+      ctx.fillText('DIVERGED', cw - 6, ch - 8);
+    }
+
+    if (this.lastAnalysis) {
+      ctx.font = '500 10px monospace';
+      ctx.textAlign = 'right';
+      if (this.lastAnalysis.isPeriodic) {
+        ctx.fillStyle = 'rgba(100, 220, 120, 0.9)';
+        const periodStr = this.lastAnalysis.period !== null ? this.lastAnalysis.period.toFixed(2) : '?';
+        ctx.fillText(`PERIODIC  T=${periodStr}s`, cw - 6, 18);
+        ctx.fillStyle = 'rgba(100, 220, 120, 0.5)';
+        ctx.fillText(`conf ${(this.lastAnalysis.confidence * 100).toFixed(0)}%`, cw - 6, 30);
+      } else {
+        ctx.fillStyle = 'rgba(220, 100, 100, 0.9)';
+        ctx.fillText('CHAOTIC', cw - 6, 18);
+        if (this.lastAnalysis.confidence > 0) {
+          ctx.fillStyle = 'rgba(220, 100, 100, 0.5)';
+          ctx.fillText(`conf ${(this.lastAnalysis.confidence * 100).toFixed(0)}%`, cw - 6, 30);
+        }
+      }
     }
 
     ctx.restore();
+
+    const showEnergy = this.systemKey === 'elastic' || this.systemKey === 'nonlinear';
+    this.phaseSpaceGraph.draw(showEnergy);
+    this.phaseSpaceGraph.drawPoincare();
   }
 
   rebuildForConfig(config: SimulationConfig) {
-    const newKey: SystemKey = config.system === 'rigid' ? 'rigid' : 'elastic';
+    const newKey: SystemKey = config.system === 'rigid' ? 'rigid' : (config.system === 'nonlinear' ? 'nonlinear' : 'elastic');
     this.config = config;
     if (newKey !== this.systemKey) {
       this.systemKey = newKey;
-      if (newKey === 'elastic') {
+      if (newKey === 'elastic' || newKey === 'nonlinear') {
         if (!this.baseBPair) this.baseBPair = this.makePair();
         if (!this.pertBPair) this.pertBPair = this.makePair();
         if (!this.baseSB) this.baseSB = new Float32Array(4);

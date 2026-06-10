@@ -1,9 +1,9 @@
-import type { SimulationConfig } from '../types/config.ts';
+import type { SimulationConfig, PhaseSpaceAxis } from '../types/config.ts';
 
 export class ZoomController {
   private zoomHistory: Array<{
-    theta1: { min: number; max: number };
-    theta2: { min: number; max: number };
+    x: PhaseSpaceAxis;
+    y: PhaseSpaceAxis;
   }> = [];
 
   constructor(
@@ -28,21 +28,23 @@ export class ZoomController {
     const ny1 = Math.max(0, Math.min(1, 1 - Math.max(startY, endY) / canvasHeight));
     const ny2 = Math.max(0, Math.min(1, 1 - Math.min(startY, endY) / canvasHeight));
 
-    const dataX1 = this.config.theta1Range.min + nx1 * (this.config.theta1Range.max - this.config.theta1Range.min);
-    const dataX2 = this.config.theta1Range.min + nx2 * (this.config.theta1Range.max - this.config.theta1Range.min);
-    const dataY1 = this.config.theta2Range.min + ny1 * (this.config.theta2Range.max - this.config.theta2Range.min);
-    const dataY2 = this.config.theta2Range.min + ny2 * (this.config.theta2Range.max - this.config.theta2Range.min);
+    const dataX1 = this.config.phaseSpace.x.min + nx1 * (this.config.phaseSpace.x.max - this.config.phaseSpace.x.min);
+    const dataX2 = this.config.phaseSpace.x.min + nx2 * (this.config.phaseSpace.x.max - this.config.phaseSpace.x.min);
+    const dataY1 = this.config.phaseSpace.y.min + ny1 * (this.config.phaseSpace.y.max - this.config.phaseSpace.y.min);
+    const dataY2 = this.config.phaseSpace.y.min + ny2 * (this.config.phaseSpace.y.max - this.config.phaseSpace.y.min);
 
     this.zoomHistory.push({
-      theta1: { ...this.config.theta1Range },
-      theta2: { ...this.config.theta2Range },
+      x: { ...this.config.phaseSpace.x },
+      y: { ...this.config.phaseSpace.y },
     });
 
-    this.config.theta1Range = {
+    this.config.phaseSpace.x = {
+      dimension: this.config.phaseSpace.x.dimension,
       min: Math.min(dataX1, dataX2),
       max: Math.max(dataX1, dataX2),
     };
-    this.config.theta2Range = {
+    this.config.phaseSpace.y = {
+      dimension: this.config.phaseSpace.y.dimension,
       min: Math.min(dataY1, dataY2),
       max: Math.max(dataY1, dataY2),
     };
@@ -53,19 +55,23 @@ export class ZoomController {
   zoomOut(): void {
     if (this.zoomHistory.length > 0) {
       const prev = this.zoomHistory.pop()!;
-      this.config.theta1Range = prev.theta1;
-      this.config.theta2Range = prev.theta2;
+      this.config.phaseSpace.x = prev.x;
+      this.config.phaseSpace.y = prev.y;
     } else {
-      this.config.theta1Range = { min: -3.14, max: 3.14 };
-      this.config.theta2Range = { min: -3.14, max: 3.14 };
+      this.config.phaseSpace.x.min = -Math.PI;
+      this.config.phaseSpace.x.max = Math.PI;
+      this.config.phaseSpace.y.min = -Math.PI;
+      this.config.phaseSpace.y.max = Math.PI;
     }
     this.onZoomChange();
   }
 
   reset(): void {
     this.zoomHistory = [];
-    this.config.theta1Range = { min: -3.14, max: 3.14 };
-    this.config.theta2Range = { min: -3.14, max: 3.14 };
+    this.config.phaseSpace.x.min = -Math.PI;
+    this.config.phaseSpace.x.max = Math.PI;
+    this.config.phaseSpace.y.min = -Math.PI;
+    this.config.phaseSpace.y.max = Math.PI;
     this.onZoomChange();
   }
 }

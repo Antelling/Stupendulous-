@@ -1,5 +1,5 @@
-import type { SimulationConfig } from './types/config.ts';
-import { DEFAULT_CONFIG } from './types/config.ts';
+import type { SimulationConfig, PhaseSpaceDimension } from './types/config.ts';
+import { DEFAULT_CONFIG, ELASTIC_DIMENSIONS, RIGID_DIMENSIONS } from './types/config.ts';
 import { QuadBuffer } from './webgl/quadBuffer.ts';
 import { TextureManager } from './webgl/textureManager.ts';
 import { UniformSetter } from './webgl/uniformSetter.ts';
@@ -44,7 +44,7 @@ export class ChaosApp {
     this.zoomController = new ZoomController(this.config, () => this.onZoomChange());
     this.ui = new UIController();
     this.stats = new StatsTracker();
-    this.preview = new PendulumPreview(document.getElementById('canvasWrapper')!, canvas, this.config);
+    this.preview = new PendulumPreview(document.getElementById('canvasWrapper')!, canvas, this.gl, this.config);
 
     this.setupControls();
     this.setupZoomControls();
@@ -73,14 +73,17 @@ export class ChaosApp {
   }
 
   private onZoomChange(): void {
-    this.ui.updateRangeInputs(this.config);
+    this.ui.updatePhaseSpaceInputs(this.config);
     this.rebuildSimulator();
   }
 
   private setupControls(): void {
     this.ui.bindControl('systemType', (v) => {
       this.config.system = v as SimulationConfig['system'];
+      this.handleSystemChange();
       this.ui.updateModeUI(this.config);
+      this.ui.updatePendulumParams(this.config);
+      this.ui.updatePhaseSpaceInputs(this.config);
       this.rebuildSimulator();
     });
 
@@ -97,34 +100,58 @@ export class ChaosApp {
       this.rebuildSimulator();
     }, 'change');
 
-    ['theta1Min', 'theta1Max', 'theta2Min', 'theta2Max'].forEach(id => {
+    this.ui.bindControl('xDimension', (v) => {
+      this.config.phaseSpace.x.dimension = v as PhaseSpaceDimension;
+      this.applyAxisDefaults('x');
+      this.ui.updatePhaseSpaceInputs(this.config);
+      this.ui.ensureDistinctDimensions(this.config.phaseSpace.x.dimension, this.config.phaseSpace.y.dimension);
+      this.zoomController = new ZoomController(this.config, () => this.onZoomChange());
+      this.rebuildSimulator();
+    }, 'change');
+
+    this.ui.bindControl('yDimension', (v) => {
+      this.config.phaseSpace.y.dimension = v as PhaseSpaceDimension;
+      this.applyAxisDefaults('y');
+      this.ui.updatePhaseSpaceInputs(this.config);
+      this.ui.ensureDistinctDimensions(this.config.phaseSpace.x.dimension, this.config.phaseSpace.y.dimension);
+      this.zoomController = new ZoomController(this.config, () => this.onZoomChange());
+      this.rebuildSimulator();
+    }, 'change');
+
+    ['xMin', 'xMax', 'yMin', 'yMax'].forEach(id => {
       this.ui.bindControl(id, (v) => {
         const val = parseFloat(v);
-        if (id === 'theta1Min') this.config.theta1Range.min = val;
-        else if (id === 'theta1Max') this.config.theta1Range.max = val;
-        else if (id === 'theta2Min') this.config.theta2Range.min = val;
-        else if (id === 'theta2Max') this.config.theta2Range.max = val;
+        if (id === 'xMin') this.config.phaseSpace.x.min = val;
+        else if (id === 'xMax') this.config.phaseSpace.x.max = val;
+        else if (id === 'yMin') this.config.phaseSpace.y.min = val;
+        else if (id === 'yMax') this.config.phaseSpace.y.max = val;
         this.zoomController = new ZoomController(this.config, () => this.onZoomChange());
         this.rebuildSimulator();
       }, 'change');
     });
 
-    this.ui.bindControl('omega1', (v) => {
-      this.config.omega1 = parseFloat(v);
-      this.ui.setTextContent('omega1Value', this.config.omega1.toFixed(1));
-      this.rebuildSimulator();
-    });
+    const initialValueMap: Record<string, PhaseSpaceDimension> = {
+      initAngle1: 'angle1',
+      initVelocity1: 'velocity1',
+      initAngle2: 'angle2',
+      initVelocity2: 'velocity2',
+      initStretch1: 'stretch1',
+      initStretchRate1: 'stretchRate1',
+      initStretch2: 'stretch2',
+      initStretchRate2: 'stretchRate2',
+    };
 
-    this.ui.bindControl('omega2', (v) => {
-      this.config.omega2 = parseFloat(v);
-      this.ui.setTextContent('omega2Value', this.config.omega2.toFixed(1));
-      this.rebuildSimulator();
+    Object.entries(initialValueMap).forEach(([id, dim]) => {
+      this.ui.bindControl(id, (v) => {
+        this.config.phaseSpace.initialValues[dim] = parseFloat(v);
+        this.rebuildSimulator();
+      }, 'change');
     });
 
     this.ui.bindControl('dt', (v) => {
       this.config.dt = parseFloat(v);
-      this.ui.setTextContent('dtValue', this.config.dt.toFixed(3));
-    });
+      this.ui.updateIntegrationInputs(this.config);
+    }, 'change');
 
     this.ui.bindControl('iterations', (v) => {
       this.config.iterationsPerFrame = parseInt(v);
@@ -135,18 +162,6 @@ export class ChaosApp {
       this.config.maxIter = parseInt(v);
       this.rebuildSimulator();
     }, 'change');
-
-    this.ui.bindControl('dtDiv', (v) => {
-      this.config.dt = parseFloat(v);
-      this.ui.setTextContent('dtDivValue', this.config.dt.toFixed(3));
-      this.rebuildSimulator();
-    });
-
-    this.ui.bindControl('threshold', (v) => {
-      this.config.threshold = parseFloat(v);
-      this.ui.setTextContent('thresholdValue', this.config.threshold.toFixed(2));
-      this.rebuildSimulator();
-    });
 
     this.ui.bindControl('perturb', (v) => {
       this.config.perturb = parseFloat(v);
@@ -165,11 +180,35 @@ export class ChaosApp {
 
     this.ui.bindButton('resetBtn', () => {
       this.zoomController.reset();
-      this.ui.updateRangeInputs(this.config);
+      this.ui.updatePhaseSpaceInputs(this.config);
       this.rebuildSimulator();
     });
 
     this.ui.bindButton('downloadBtn', () => this.download());
+
+    this.ui.bindControl('m1', (v) => {
+      this.config.m1 = parseFloat(v);
+      this.ui.setTextContent('m1Value', this.config.m1.toFixed(1));
+      this.rebuildSimulator();
+    });
+
+    this.ui.bindControl('m2', (v) => {
+      this.config.m2 = parseFloat(v);
+      this.ui.setTextContent('m2Value', this.config.m2.toFixed(1));
+      this.rebuildSimulator();
+    });
+
+    this.ui.bindControl('L1', (v) => {
+      this.config.L1 = parseFloat(v);
+      this.ui.setTextContent('L1Value', this.config.L1.toFixed(1));
+      this.rebuildSimulator();
+    });
+
+    this.ui.bindControl('L2', (v) => {
+      this.config.L2 = parseFloat(v);
+      this.ui.setTextContent('L2Value', this.config.L2.toFixed(1));
+      this.rebuildSimulator();
+    });
 
     this.ui.bindControl('k1', (v) => {
       this.config.k1 = parseFloat(v);
@@ -185,6 +224,38 @@ export class ChaosApp {
 
     this.ui.updateModeUI(this.config);
     this.ui.updateLegend(this.config.colormap);
+    this.ui.updatePendulumParams(this.config);
+    this.ui.updatePhaseSpaceInputs(this.config);
+    this.ui.updateIntegrationInputs(this.config);
+    this.ui.ensureDistinctDimensions(this.config.phaseSpace.x.dimension, this.config.phaseSpace.y.dimension);
+  }
+
+  private handleSystemChange(): void {
+    const isElastic = this.config.system !== 'rigid';
+    const availableDims = isElastic ? ELASTIC_DIMENSIONS : RIGID_DIMENSIONS;
+
+    if (!availableDims.includes(this.config.phaseSpace.x.dimension)) {
+      this.config.phaseSpace.x.dimension = 'angle1';
+      this.applyAxisDefaults('x');
+    }
+    if (!availableDims.includes(this.config.phaseSpace.y.dimension) || this.config.phaseSpace.y.dimension === this.config.phaseSpace.x.dimension) {
+      this.config.phaseSpace.y.dimension = 'angle2';
+      this.applyAxisDefaults('y');
+    }
+  }
+
+  private applyAxisDefaults(axis: 'x' | 'y'): void {
+    const dim = this.config.phaseSpace[axis].dimension;
+    if (dim.startsWith('angle')) {
+      this.config.phaseSpace[axis].min = -Math.PI;
+      this.config.phaseSpace[axis].max = Math.PI;
+    } else if (dim.startsWith('stretch') && !dim.includes('Rate')) {
+      this.config.phaseSpace[axis].min = -0.5;
+      this.config.phaseSpace[axis].max = 0.5;
+    } else {
+      this.config.phaseSpace[axis].min = -5;
+      this.config.phaseSpace[axis].max = 5;
+    }
   }
 
   private setupZoomControls(): void {

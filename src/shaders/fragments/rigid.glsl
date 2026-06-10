@@ -1,14 +1,14 @@
 // Rigid double pendulum ODE right-hand side
-// Requires uniform: none (all constants)
+// Requires uniforms: float u_m1, float u_m2, float u_L1, float u_L2
 // Defines: computeAccelerations(theta1, omega1, theta2, omega2) -> vec2
 
-const float m1 = 1.0;
-const float m2 = 1.0;
-const float L1 = 1.0;
-const float L2 = 1.0;
 const float g = 9.81;
 
 vec2 computeAccelerations(float theta1, float omega1, float theta2, float omega2) {
+    float m1 = u_m1;
+    float m2 = u_m2;
+    float L1 = u_L1;
+    float L2 = u_L2;
     float delta = theta1 - theta2;
     float sinDelta = sin(delta);
     float cosDelta = cos(delta);

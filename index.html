@@ -3,161 +3,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bob2 Distance - Double Pendulum Chaos</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <title>Double Pendulum Chaos</title>
     <style>
-        /* ========== Design Tokens ========== */
-        :root {
-            --bg-base: #080a10;
-            --bg-surface: rgba(12, 15, 24, 0.94);
-            --bg-elevated: rgba(18, 22, 35, 0.96);
-            --bg-input: rgba(4, 6, 14, 0.9);
-            --bg-input-hover: rgba(10, 14, 28, 0.95);
-            --border-subtle: rgba(255, 255, 255, 0.04);
-            --border-default: rgba(255, 255, 255, 0.08);
-            --border-strong: rgba(255, 255, 255, 0.14);
-            --border-accent: rgba(0, 212, 170, 0.3);
-            --text-bright: #f0f1f5;
-            --text-primary: #c8cad4;
-            --text-secondary: #7a7f96;
-            --text-muted: #4a4f64;
-            --accent: #00d4aa;
-            --accent-hover: #00eabb;
-            --accent-dim: rgba(0, 212, 170, 0.08);
-            --accent-glow: rgba(0, 212, 170, 0.18);
-            --accent-blue: #4a9eff;
-            --accent-blue-dim: rgba(74, 158, 255, 0.08);
-            --accent-warn: #e8a030;
-            --accent-warm-dim: rgba(232, 160, 48, 0.08);
-            --accent-danger: #ff4d6a;
-            --radius-xs: 4px;
-            --radius-sm: 6px;
-            --radius-md: 10px;
-            --radius-lg: 14px;
-            --radius-xl: 20px;
-            --font-ui: 'Outfit', system-ui, -apple-system, sans-serif;
-            --font-mono: 'IBM Plex Mono', 'SF Mono', 'Fira Code', monospace;
-            --space-xs: 4px;
-            --space-sm: 8px;
-            --space-md: 12px;
-            --space-lg: 16px;
-            --space-xl: 24px;
-            --space-2xl: 32px;
-            --panel-width: 330px;
-            --header-height: 52px;
-            --transition-fast: 150ms ease;
-            --transition-base: 250ms ease;
-            --shadow-soft: 0 2px 12px rgba(0,0,0,0.4);
-            --shadow-glow: 0 0 30px rgba(0, 212, 170, 0.06);
-        }
-
-        /* ========== Reset & Base ========== */
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-
         body {
-            font-family: var(--font-ui);
-            background: var(--bg-base);
-            min-height: 100vh;
-            color: var(--text-primary);
-            overflow-x: hidden;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
+            font-family: sans-serif;
+            background: #111;
+            color: #ccc;
+            padding: 16px;
         }
-
-        /* Subtle background texture */
-        body::before {
-            content: '';
-            position: fixed;
-            inset: 0;
-            background:
-                radial-gradient(ellipse 80% 60% at 20% 80%, rgba(0, 212, 170, 0.03) 0%, transparent 60%),
-                radial-gradient(ellipse 60% 80% at 80% 20%, rgba(74, 158, 255, 0.02) 0%, transparent 60%);
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        /* ========== Header ========== */
-        .app-header {
-            position: relative;
-            z-index: 1;
-            height: var(--header-height);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 var(--space-xl);
-            border-bottom: 1px solid var(--border-subtle);
-            background: var(--bg-surface);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-        }
-
-        .app-header h1 {
-            font-size: 1.05rem;
-            font-weight: 600;
-            color: var(--text-bright);
-            letter-spacing: -0.02em;
-        }
-
-        .app-header h1::before {
-            content: '';
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--accent);
-            margin-right: 10px;
-            box-shadow: 0 0 8px var(--accent-glow);
-            vertical-align: middle;
-        }
-
-        .subtitle {
-            font-size: 0.78rem;
-            color: var(--text-muted);
-            font-weight: 400;
-        }
-
-        /* ========== Main Layout ========== */
-        .app-layout {
-            position: relative;
-            z-index: 1;
-            display: flex;
-            height: calc(100vh - var(--header-height));
-            overflow: hidden;
-        }
-
-        /* ========== Canvas Section ========== */
-        .canvas-section {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: var(--space-xl);
-            min-width: 0;
-            overflow: hidden;
-        }
-
-        .canvas-frame {
-            position: relative;
-            width: 100%;
-            max-width: min(calc(100vh - var(--header-height) - 120px), 640px);
-            aspect-ratio: 1;
-            border-radius: var(--radius-lg);
-            overflow: hidden;
-            border: 1px solid var(--border-default);
-            background: #000;
-            box-shadow: var(--shadow-soft), var(--shadow-glow);
-        }
-
-        #canvas {
+        .control-group {
             display: block;
-            width: 100%;
-            height: 100%;
-            cursor: crosshair;
+            margin-bottom: 8px;
         }
-
+        .control-group label {
+            display: block;
+            margin-bottom: 2px;
+            font-size: 0.85rem;
+        }
+        select, input[type="number"] {
+            padding: 3px 6px;
+            background: #1a1a1a;
+            color: #ccc;
+            border: 1px solid #444;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+        input[type="range"] {
+            width: 300px;
+        }
+        .range-row {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .range-row input[type="number"] {
+            width: 70px;
+        }
+        .range-row span {
+            font-size: 0.8rem;
+            color: #888;
+        }
+        .panel {
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 12px;
+        }
+        .panel-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #aaa;
+        }
+        .axis-section {
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #333;
+        }
+        .axis-section:last-of-type {
+            border-bottom: none;
+        }
+        .axis-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #999;
+            margin-bottom: 6px;
+        }
+        .initial-values-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+        .initial-values-grid .control-group label {
+            font-size: 0.75rem;
+        }
+        .initial-values-grid input[type="number"] {
+            width: 90px;
+        }
         #zoomOverlay {
             position: absolute;
             pointer-events: none;
@@ -166,690 +89,269 @@
             background: rgba(0, 212, 170, 0.08);
             display: none;
         }
-
+        #canvas {
+            display: inline-block;
+            cursor: crosshair;
+            vertical-align: top;
+        }
         #previewCanvas {
-            position: absolute;
-            inset: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 15;
+            display: inline-block;
+            margin-left: 5px;
+            vertical-align: top;
         }
-
-        /* ========== Canvas Footer ========== */
-        .canvas-footer {
-            width: 100%;
-            max-width: min(calc(100vh - var(--header-height) - 120px), 640px);
-            margin-top: var(--space-md);
-        }
-
-        .legend {
-            display: flex;
-            align-items: center;
-            gap: var(--space-sm);
-            font-size: 0.7rem;
-            font-family: var(--font-mono);
-            color: var(--text-muted);
-        }
-
-        .legend-label {
-            flex-shrink: 0;
-            font-size: 0.65rem;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-        }
-
-        .legend-track {
-            flex: 1;
-            height: 10px;
-            border-radius: 5px;
-            overflow: hidden;
-            border: 1px solid var(--border-default);
-            background: rgba(0,0,0,0.3);
-        }
-
-        .legend-gradient {
-            width: 100%;
-            height: 100%;
-            border-radius: 4px;
-        }
-
-        .viridis-gradient {
-            background: linear-gradient(90deg, rgb(68, 1, 84), rgb(33, 145, 140), rgb(253, 231, 37));
-        }
-
-        .rainbow-gradient {
-            background: linear-gradient(90deg, hsl(0,80%,50%), hsl(60,80%,50%), hsl(120,80%,50%), hsl(180,80%,50%), hsl(240,80%,50%), hsl(300,80%,50%));
-        }
-
-        .hint {
-            font-size: 0.65rem;
-            color: var(--text-muted);
-            margin-top: var(--space-sm);
-            text-align: center;
-            font-family: var(--font-mono);
-            letter-spacing: 0.01em;
-        }
-
-        /* ========== Panel (Sidebar) ========== */
-        .panel {
-            width: var(--panel-width);
-            flex-shrink: 0;
-            height: calc(100vh - var(--header-height));
-            overflow-y: auto;
-            overflow-x: hidden;
-            background: var(--bg-surface);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border-left: 1px solid var(--border-default);
-            padding: var(--space-md);
-            display: flex;
-            flex-direction: column;
-            gap: var(--space-sm);
-        }
-
-        /* Custom scrollbar */
-        .panel::-webkit-scrollbar {
-            width: 4px;
-        }
-        .panel::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .panel::-webkit-scrollbar-thumb {
-            background: var(--border-strong);
-            border-radius: 2px;
-        }
-
-        /* ========== Mode Indicator ========== */
-        .mode-indicator {
-            padding: var(--space-sm) var(--space-md);
-            background: var(--accent-dim);
-            border: 1px solid var(--border-accent);
-            border-radius: var(--radius-sm);
-            font-size: 0.72rem;
-            font-weight: 500;
-            color: var(--accent);
-            text-align: center;
-            letter-spacing: 0.02em;
-            text-transform: uppercase;
-            font-family: var(--font-mono);
-        }
-
-        /* ========== Collapsible Sections ========== */
-        .section {
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-md);
-            background: rgba(255, 255, 255, 0.01);
-            transition: border-color var(--transition-base);
-        }
-
-        .section:hover {
-            border-color: var(--border-default);
-        }
-
-        .section-title {
-            display: flex;
-            align-items: center;
-            gap: var(--space-sm);
-            padding: var(--space-md) var(--space-lg);
+        button {
+            padding: 4px 12px;
+            background: #222;
+            color: #ccc;
+            border: 1px solid #444;
+            border-radius: 3px;
             cursor: pointer;
-            font-size: 0.72rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            color: var(--text-secondary);
-            background: var(--bg-elevated);
-            list-style: none;
-            user-select: none;
-            transition: color var(--transition-fast), background var(--transition-fast);
+            margin-right: 4px;
+        }
+        button:hover {
+            background: #333;
+        }
+        hr {
             border: none;
-            outline: none;
-        }
-
-        .section-title::-webkit-details-marker {
-            display: none;
-        }
-
-        .section-title::before {
-            content: '\25B8';
-            font-size: 0.65em;
-            transition: transform var(--transition-fast);
-            color: var(--text-muted);
-            flex-shrink: 0;
-        }
-
-        .section[open] > .section-title::before {
-            transform: rotate(90deg);
-        }
-
-        .section-title:hover {
-            color: var(--text-bright);
-            background: rgba(255, 255, 255, 0.03);
-        }
-
-        .section-title:focus-visible {
-            outline: 2px solid var(--accent);
-            outline-offset: -2px;
-        }
-
-        .section-body {
-            padding: var(--space-md) var(--space-lg) var(--space-lg);
-            display: flex;
-            flex-direction: column;
-            gap: var(--space-md);
-        }
-
-        /* ========== Form Controls ========== */
-        .control-group {
-            display: flex;
-            flex-direction: column;
-            gap: var(--space-xs);
-        }
-
-        .control-group label {
-            font-size: 0.72rem;
-            color: var(--text-secondary);
-            font-weight: 400;
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-        }
-
-        .value-display {
-            font-family: var(--font-mono);
-            color: var(--accent);
-            font-size: 0.72rem;
-            font-weight: 500;
-        }
-
-        /* Selects */
-        select {
-            width: 100%;
-            padding: 7px 10px;
-            background: var(--bg-input);
-            border: 1px solid var(--border-default);
-            border-radius: var(--radius-sm);
-            color: var(--text-bright);
-            font-family: var(--font-ui);
-            font-size: 0.78rem;
-            outline: none;
-            cursor: pointer;
-            appearance: none;
-            -webkit-appearance: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237a7f96'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 10px center;
-            padding-right: 28px;
-            transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-        }
-
-        select:hover {
-            border-color: var(--border-strong);
-        }
-
-        select:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 2px var(--accent-dim);
-        }
-
-        select option {
-            background: #0f1219;
-            color: var(--text-bright);
-        }
-
-        /* Number inputs */
-        input[type="number"] {
-            width: 100%;
-            padding: 7px 10px;
-            background: var(--bg-input);
-            border: 1px solid var(--border-default);
-            border-radius: var(--radius-sm);
-            color: var(--text-bright);
-            font-family: var(--font-mono);
-            font-size: 0.78rem;
-            outline: none;
-            transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-        }
-
-        input[type="number"]:hover {
-            border-color: var(--border-strong);
-        }
-
-        input[type="number"]:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 2px var(--accent-dim);
-        }
-
-        /* Range inputs */
-        input[type="range"] {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 100%;
-            height: 4px;
-            background: var(--border-default);
-            border-radius: 2px;
-            outline: none;
-            cursor: pointer;
-            margin-top: 2px;
-        }
-
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            background: var(--accent);
-            border: 2px solid var(--bg-base);
-            cursor: pointer;
-            box-shadow: 0 0 6px var(--accent-glow);
-            transition: transform var(--transition-fast), box-shadow var(--transition-fast);
-        }
-
-        input[type="range"]::-webkit-slider-thumb:hover {
-            transform: scale(1.15);
-            box-shadow: 0 0 12px var(--accent-glow);
-        }
-
-        input[type="range"]::-moz-range-thumb {
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            background: var(--accent);
-            border: 2px solid var(--bg-base);
-            cursor: pointer;
-            box-shadow: 0 0 6px var(--accent-glow);
-        }
-
-        input[type="range"]::-webkit-slider-runnable-track {
-            height: 4px;
-            border-radius: 2px;
-        }
-
-        input[type="range"]::-moz-range-track {
-            height: 4px;
-            border-radius: 2px;
-            background: var(--border-default);
-        }
-
-        /* Range inputs row */
-        .range-inputs {
-            display: flex;
-            align-items: center;
-            gap: var(--space-sm);
-        }
-
-        .range-inputs input[type="number"] {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .range-separator {
-            color: var(--text-muted);
-            font-size: 0.7rem;
-            flex-shrink: 0;
-        }
-
-        /* ========== Buttons ========== */
-        .btn {
-            width: 100%;
-            padding: 9px 14px;
-            border: 1px solid var(--border-default);
-            border-radius: var(--radius-sm);
-            font-family: var(--font-ui);
-            font-size: 0.8rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all var(--transition-fast);
-            outline: none;
-            letter-spacing: 0.01em;
-        }
-
-        .btn:focus-visible {
-            outline: 2px solid var(--accent);
-            outline-offset: 2px;
-        }
-
-        .btn-secondary {
-            background: var(--bg-input);
-            color: var(--text-secondary);
-        }
-
-        .btn-secondary:hover {
-            background: var(--bg-input-hover);
-            color: var(--text-bright);
-            border-color: var(--border-strong);
-        }
-
-        .btn-primary {
-            background: var(--accent-dim);
-            border-color: rgba(0, 212, 170, 0.2);
-            color: var(--accent);
-        }
-
-        .btn-primary:hover {
-            background: var(--accent-glow);
-            border-color: rgba(0, 212, 170, 0.35);
-            color: var(--accent-hover);
-        }
-
-        .btn-accent {
-            background: linear-gradient(135deg, rgba(0, 212, 170, 0.15), rgba(0, 212, 170, 0.08));
-            border: 1px solid rgba(0, 212, 170, 0.25);
-            color: var(--accent);
-            font-weight: 600;
-            text-shadow: 0 0 20px var(--accent-glow);
-        }
-
-        .btn-accent:hover {
-            background: linear-gradient(135deg, rgba(0, 212, 170, 0.25), rgba(0, 212, 170, 0.12));
-            border-color: rgba(0, 212, 170, 0.4);
-            color: var(--accent-hover);
-            box-shadow: 0 0 20px var(--accent-dim);
-        }
-
-        .btn-warning {
-            background: var(--accent-warm-dim);
-            border-color: rgba(232, 160, 48, 0.2);
-            color: var(--accent-warn);
-        }
-
-        .btn-warning:hover {
-            background: rgba(232, 160, 48, 0.15);
-            border-color: rgba(232, 160, 48, 0.35);
-        }
-
-        .button-row {
-            display: flex;
-            gap: var(--space-sm);
-        }
-
-        .button-row .btn {
-            flex: 1;
-        }
-
-        /* ========== Stats Grid ========== */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: var(--space-sm);
-        }
-
-        .stat-item {
-            background: var(--bg-input);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-sm);
-            padding: var(--space-sm) var(--space-md);
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-
-        .stat-label {
-            font-size: 0.6rem;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            color: var(--text-muted);
-            font-weight: 500;
-        }
-
-        .stat-value {
-            font-family: var(--font-mono);
-            font-size: 0.85rem;
-            font-weight: 500;
-            color: var(--text-bright);
-        }
-
-        /* ========== Responsive ========== */
-        @media (max-width: 900px) {
-            .app-layout {
-                flex-direction: column;
-                height: auto;
-                min-height: calc(100vh - 80px);
-                overflow-y: auto;
-                overflow-x: hidden;
-            }
-
-            .canvas-section {
-                padding: var(--space-md);
-                flex: none;
-            }
-
-            .canvas-frame {
-                max-width: 100%;
-                max-height: 60vh;
-            }
-
-            .canvas-footer {
-                max-width: 100%;
-            }
-
-            .panel {
-                width: 100%;
-                height: auto;
-                border-left: none;
-                border-top: 1px solid var(--border-default);
-                max-height: none;
-                overflow-y: visible;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .app-header h1 {
-                font-size: 0.92rem;
-            }
-
-            .canvas-section {
-                padding: var(--space-sm);
-            }
-
-            .panel {
-                padding: var(--space-sm);
-            }
-
-            .section-body {
-                padding: var(--space-sm) var(--space-md) var(--space-md);
-            }
+            border-top: 1px solid #333;
+            margin: 12px 0;
         }
     </style>
 </head>
 <body>
-    <header class="app-header">
-        <h1>Double Pendulum Chaos</h1>
-        <p class="subtitle" id="subtitle">Total distance traveled by the second pendulum bob</p>
-    </header>
+    <div id="modeIndicator" style="margin-bottom: 8px;">Mode: Bob2 Distance</div>
+    <p id="subtitle" style="margin-bottom: 12px;">Total distance traveled by the second pendulum bob</p>
 
-    <main class="app-layout">
-        <section class="canvas-section">
-            <div class="canvas-frame" id="canvasWrapper">
-                <canvas id="canvas" width="512" height="512"></canvas>
-                <canvas id="previewCanvas"></canvas>
-                <div id="zoomOverlay"></div>
+    <div id="pendulumMetadata" class="panel">
+        <div class="panel-title">Pendulum Metadata</div>
+        <div class="control-group">
+            <label for="systemType">Pendulum Type</label>
+            <select id="systemType">
+                <option value="rigid">Rigid Double Pendulum</option>
+                <option value="elastic12">Elastic Double Pendulum</option>
+                <option value="nonlinear">Nonlinear Elastic Pendulum</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>Bob 1 Mass <span id="m1Value">1.0</span></label>
+            <input type="range" id="m1" min="0.1" max="5" step="0.1" value="1">
+        </div>
+        <div class="control-group">
+            <label>Bob 2 Mass <span id="m2Value">1.0</span></label>
+            <input type="range" id="m2" min="0.1" max="5" step="0.1" value="1">
+        </div>
+        <div class="control-group">
+            <label>Arm 1 Length <span id="L1Value">1.0</span></label>
+            <input type="range" id="L1" min="0.1" max="3" step="0.1" value="1">
+        </div>
+        <div class="control-group">
+            <label>Arm 2 Length <span id="L2Value">1.0</span></label>
+            <input type="range" id="L2" min="0.1" max="3" step="0.1" value="1">
+        </div>
+        <div id="elasticControls" style="display: none;">
+            <div class="control-group">
+                <label>Spring k₁ <span id="k1Value">50</span></label>
+                <input type="range" id="k1" min="1" max="500" step="1" value="50">
             </div>
-
-            <div class="canvas-footer">
-                <div class="legend">
-                    <span class="legend-label">Fast</span>
-                    <div class="legend-track">
-                        <div class="legend-gradient" id="legendGradient"></div>
-                    </div>
-                    <span class="legend-label">Slow</span>
-                </div>
-                <div class="hint" id="hintText">Drag to zoom in · Right-click or button to zoom out</div>
+            <div class="control-group">
+                <label>Spring k₂ <span id="k2Value">50</span></label>
+                <input type="range" id="k2" min="1" max="500" step="1" value="50">
             </div>
-        </section>
+        </div>
+    </div>
 
-        <aside class="panel">
-            <div class="mode-indicator" id="modeIndicator">Mode: Bob2 Distance</div>
+    <div id="phaseSpacePanel" class="panel">
+        <div class="panel-title">Pendulum Phase Space</div>
 
-            <details class="section" open>
-                <summary class="section-title">Visualization</summary>
-                <div class="section-body">
-                    <div class="control-group">
-                        <label for="systemType">System</label>
-                        <select id="systemType">
-                            <option value="rigid">Rigid Double Pendulum</option>
-                            <option value="elastic1">Elastic Arm 1</option>
-                            <option value="elastic2">Elastic Arm 2</option>
-                            <option value="elastic12">Both Elastic</option>
-                        </select>
-                    </div>
-
-                    <div class="control-group">
-                        <label for="vizMode">Visualization</label>
-                        <select id="vizMode">
-                            <option value="distance">Bob2 Distance</option>
-                            <option value="divergence">Divergence Time</option>
-                        </select>
-                    </div>
-
-                    <div class="control-group">
-                        <label for="resolution">Resolution</label>
-                        <select id="resolution">
-                            <option value="256">256 x 256</option>
-                            <option value="512" selected>512 x 512</option>
-                            <option value="1024">1024 x 1024</option>
-                        </select>
-                    </div>
-
-                    <div class="control-group">
-                        <label for="colormap">Color Map</label>
-                        <select id="colormap">
-                            <option value="0">Viridis</option>
-                            <option value="1">Magma</option>
-                            <option value="2">Plasma</option>
-                            <option value="3">Inferno</option>
-                            <option value="4">Turbo</option>
-                            <option value="5">Jet</option>
-                            <option value="6" selected>Rainbow</option>
-                        </select>
-                    </div>
-
-                    <div class="control-group">
-                        <label for="toneMapping">Tone Mapping</label>
-                        <select id="toneMapping">
-                            <option value="0" selected>Linear</option>
-                            <option value="1">Logarithmic</option>
-                            <option value="2">Square Root</option>
-                            <option value="3">S-Curve</option>
-                        </select>
-                    </div>
+        <div class="axis-section">
+            <div class="axis-title">X Dimension</div>
+            <div class="control-group">
+                <label for="xDimension">Dimension</label>
+                <select id="xDimension">
+                    <option value="angle1">First Angle θ₁</option>
+                    <option value="velocity1">First Angular Velocity ω₁</option>
+                    <option value="angle2">Second Angle θ₂</option>
+                    <option value="velocity2">Second Angular Velocity ω₂</option>
+                    <option value="stretch1" class="elastic-only" style="display:none;">First Arm Stretch r₁</option>
+                    <option value="stretchRate1" class="elastic-only" style="display:none;">First Stretch Rate ṙ₁</option>
+                    <option value="stretch2" class="elastic-only" style="display:none;">Second Arm Stretch r₂</option>
+                    <option value="stretchRate2" class="elastic-only" style="display:none;">Second Stretch Rate ṙ₂</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>Range</label>
+                <div class="range-row">
+                    <input type="number" id="xMin" value="-3.14" step="0.1">
+                    <span>to</span>
+                    <input type="number" id="xMax" value="3.14" step="0.1">
                 </div>
-            </details>
+            </div>
+        </div>
 
-            <details class="section" open>
-                <summary class="section-title">Physics</summary>
-                <div class="section-body">
-                    <div class="control-group">
-                        <label>θ₁ Range (radians)</label>
-                        <div class="range-inputs">
-                            <input type="number" id="theta1Min" value="-3.14" step="0.1">
-                            <span class="range-separator">to</span>
-                            <input type="number" id="theta1Max" value="3.14" step="0.1">
-                        </div>
-                    </div>
-
-                    <div class="control-group">
-                        <label>θ₂ Range (radians)</label>
-                        <div class="range-inputs">
-                            <input type="number" id="theta2Min" value="-3.14" step="0.1">
-                            <span class="range-separator">to</span>
-                            <input type="number" id="theta2Max" value="3.14" step="0.1">
-                        </div>
-                    </div>
-
-                    <div class="control-group">
-                        <label>Initial ω₁ <span id="omega1Value" class="value-display">0.0</span></label>
-                        <input type="range" id="omega1" min="-5" max="5" step="0.1" value="0">
-                    </div>
-
-                    <div class="control-group">
-                        <label>Initial ω₂ <span id="omega2Value" class="value-display">0.0</span></label>
-                        <input type="range" id="omega2" min="-5" max="5" step="0.1" value="0">
-                    </div>
-
-                    <div id="distanceControls">
-                        <div class="control-group">
-                            <label>Time Step (dt) <span id="dtValue" class="value-display">0.002</span></label>
-                            <input type="range" id="dt" min="0.001" max="0.01" step="0.001" value="0.002">
-                        </div>
-
-                        <div class="control-group">
-                            <label>Iterations per Frame <span id="iterValue" class="value-display">10</span></label>
-                            <input type="range" id="iterations" min="1" max="50" value="10">
-                        </div>
-                    </div>
-
-                    <div class="control-group">
-                        <label>Perturbation <span id="perturbValue" class="value-display">0.00001</span></label>
-                        <input type="range" id="perturb" min="0.000001" max="0.001" step="0.000001" value="0.00001">
-                    </div>
-
-                    <div id="elasticControls" style="display: none;">
-                        <div class="control-group">
-                            <label>Spring k₁ <span id="k1Value" class="value-display">50</span></label>
-                            <input type="range" id="k1" min="1" max="500" step="1" value="50">
-                        </div>
-                        <div class="control-group">
-                            <label>Spring k₂ <span id="k2Value" class="value-display">50</span></label>
-                            <input type="range" id="k2" min="1" max="500" step="1" value="50">
-                        </div>
-                    </div>
-
-                    <div id="divergenceControls" style="display: none;">
-                        <div class="control-group">
-                            <label>Max Iterations</label>
-                            <input type="number" id="maxIter" min="1" max="100000" value="5000">
-                        </div>
-
-                        <div class="control-group">
-                            <label>Time Step (dt) <span id="dtDivValue" class="value-display">0.002</span></label>
-                            <input type="range" id="dtDiv" min="0.001" max="0.01" step="0.001" value="0.002">
-                        </div>
-
-                        <div class="control-group">
-                            <label>Divergence Threshold <span id="thresholdValue" class="value-display">0.05</span></label>
-                            <input type="range" id="threshold" min="0.01" max="0.5" step="0.01" value="0.05">
-                        </div>
-                    </div>
+        <div class="axis-section">
+            <div class="axis-title">Y Dimension</div>
+            <div class="control-group">
+                <label for="yDimension">Dimension</label>
+                <select id="yDimension">
+                    <option value="angle1">First Angle θ₁</option>
+                    <option value="velocity1">First Angular Velocity ω₁</option>
+                    <option value="angle2" selected>Second Angle θ₂</option>
+                    <option value="velocity2">Second Angular Velocity ω₂</option>
+                    <option value="stretch1" class="elastic-only" style="display:none;">First Arm Stretch r₁</option>
+                    <option value="stretchRate1" class="elastic-only" style="display:none;">First Stretch Rate ṙ₁</option>
+                    <option value="stretch2" class="elastic-only" style="display:none;">Second Arm Stretch r₂</option>
+                    <option value="stretchRate2" class="elastic-only" style="display:none;">Second Stretch Rate ṙ₂</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>Range</label>
+                <div class="range-row">
+                    <input type="number" id="yMin" value="-3.14" step="0.1">
+                    <span>to</span>
+                    <input type="number" id="yMax" value="3.14" step="0.1">
                 </div>
-            </details>
+            </div>
+        </div>
 
-            <details class="section">
-                <summary class="section-title">Actions</summary>
-                <div class="section-body">
-                    <div class="button-row">
-                        <button type="button" class="btn btn-warning" id="zoomOutBtn">Zoom Out</button>
-                        <button type="button" class="btn btn-primary" id="resetBtn">Reset</button>
-                    </div>
-                    <button type="button" class="btn btn-secondary" id="downloadBtn">Download Image</button>
+        <div>
+            <div class="axis-title">Initial Values</div>
+            <div class="initial-values-grid">
+                <div class="control-group">
+                    <label for="initAngle1">θ₁</label>
+                    <input type="number" id="initAngle1" value="0" step="0.1">
                 </div>
-            </details>
+                <div class="control-group">
+                    <label for="initVelocity1">ω₁</label>
+                    <input type="number" id="initVelocity1" value="0" step="0.1">
+                </div>
+                <div class="control-group">
+                    <label for="initAngle2">θ₂</label>
+                    <input type="number" id="initAngle2" value="0" step="0.1">
+                </div>
+                <div class="control-group">
+                    <label for="initVelocity2">ω₂</label>
+                    <input type="number" id="initVelocity2" value="0" step="0.1">
+                </div>
+                <div class="control-group elastic-initial" style="display:none;">
+                    <label for="initStretch1">r₁</label>
+                    <input type="number" id="initStretch1" value="0" step="0.01">
+                </div>
+                <div class="control-group elastic-initial" style="display:none;">
+                    <label for="initStretchRate1">ṙ₁</label>
+                    <input type="number" id="initStretchRate1" value="0" step="0.1">
+                </div>
+                <div class="control-group elastic-initial" style="display:none;">
+                    <label for="initStretch2">r₂</label>
+                    <input type="number" id="initStretch2" value="0" step="0.01">
+                </div>
+                <div class="control-group elastic-initial" style="display:none;">
+                    <label for="initStretchRate2">ṙ₂</label>
+                    <input type="number" id="initStretchRate2" value="0" step="0.1">
+                </div>
+            </div>
+        </div>
+    </div>
 
-            <details class="section" open>
-                <summary class="section-title">Statistics</summary>
-                <div class="section-body">
-                    <div class="stats-grid">
-                        <div class="stat-item" id="frameRow">
-                            <span class="stat-label">Frame</span>
-                            <span class="stat-value" id="frameCount">0</span>
-                        </div>
-                        <div class="stat-item" id="maxDistRow">
-                            <span class="stat-label">Max Dist</span>
-                            <span class="stat-value" id="maxDistance">0.00</span>
-                        </div>
-                        <div class="stat-item">
-                            <span class="stat-label">FPS</span>
-                            <span class="stat-value" id="fps">0</span>
-                        </div>
-                        <div class="stat-item">
-                            <span class="stat-label">Zoom</span>
-                            <span class="stat-value" id="zoomLevel">1</span>
-                        </div>
-                    </div>
-                </div>
-            </details>
-        </aside>
-    </main>
+    <div id="integrationPanel" class="panel">
+        <div class="panel-title">Integration Settings</div>
+        <div class="control-group">
+            <label>Time Step (dt)</label>
+            <input type="number" id="dt" min="0.0001" max="0.01" step="0.0001" value="0.002">
+        </div>
+        <div class="control-group">
+            <label>Iterations per Frame <span id="iterValue">10</span></label>
+            <input type="range" id="iterations" min="1" max="50" value="10">
+        </div>
+        <div id="maxIterControl" class="control-group" style="display: none;">
+            <label>Max Iterations</label>
+            <input type="number" id="maxIter" min="1" max="100000" value="5000">
+        </div>
+        <div id="perturbControl" class="control-group" style="display: none;">
+            <label>Perturbation <span id="perturbValue">0.00001</span></label>
+            <input type="range" id="perturb" min="0.000001" max="0.001" step="0.000001" value="0.00001">
+        </div>
+    </div>
+
+    <div id="visualizationPanel" class="panel">
+        <div class="panel-title">Visualization Settings</div>
+        <div class="control-group">
+            <label for="vizMode">Visualization</label>
+            <select id="vizMode">
+                <option value="distance">Bob2 Distance</option>
+                <option value="divergence">Divergence Time</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label for="resolution">Resolution</label>
+            <select id="resolution">
+                <option value="256">256 x 256</option>
+                <option value="512" selected>512 x 512</option>
+                <option value="1024">1024 x 1024</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label for="colormap">Color Map</label>
+            <select id="colormap">
+                <option value="0">Viridis</option>
+                <option value="1">Magma</option>
+                <option value="2">Plasma</option>
+                <option value="3">Inferno</option>
+                <option value="4">Turbo</option>
+                <option value="5">Jet</option>
+                <option value="6" selected>Rainbow</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label for="toneMapping">Tone Mapping</label>
+            <select id="toneMapping">
+                <option value="0" selected>Linear</option>
+                <option value="1">Logarithmic</option>
+                <option value="2">Square Root</option>
+                <option value="3">S-Curve</option>
+            </select>
+        </div>
+    </div>
+
+    <hr>
+
+    <div class="control-group">
+        <button type="button" id="zoomOutBtn">Zoom Out</button>
+        <button type="button" id="resetBtn">Reset</button>
+        <button type="button" id="downloadBtn">Download Image</button>
+    </div>
+
+    <hr>
+
+    <div style="margin-bottom: 8px;">
+        <span id="frameRow">Frame: <span id="frameCount">0</span></span> |
+        <span id="maxDistRow">Max Dist: <span id="maxDistance">0.00</span></span> |
+        FPS: <span id="fps">0</span> |
+        Zoom: <span id="zoomLevel">1</span>
+    </div>
+
+    <div style="margin-bottom: 12px;">
+        Fast
+        <span id="legendGradient" style="display: inline-block; width: 200px; height: 10px; vertical-align: middle; background: linear-gradient(90deg, hsl(0,80%,50%), hsl(60,80%,50%), hsl(120,80%,50%), hsl(180,80%,50%), hsl(240,80%,50%), hsl(300,80%,50%));"></span>
+        Slow
+    </div>
+
+    <div id="canvasWrapper" style="position: relative; display: inline-block;">
+        <canvas id="canvas" width="512" height="512"></canvas>
+        <div id="zoomOverlay"></div>
+    </div>
+
+    <div id="previewPanel" style="display: inline-block; margin-left: 5px; vertical-align: top; border: 2px solid #444; border-radius: 4px; padding: 8px; background: rgba(8, 10, 16, 0.95); width: 520px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-size: 0.85rem; font-weight: 600; color: #aaa;">Trajectory Preview</span>
+            <button type="button" id="previewToggleBtn" title="Click to enable preview mode" style="padding: 2px 8px; font-size: 0.75rem;">▶ Start</button>
+        </div>
+        <canvas id="previewCanvas" width="500" height="500" style="display: block; margin-bottom: 8px; border: 1px solid #333;"></canvas>
+        <canvas id="graphCanvas" width="500" height="200" style="display: block; margin-bottom: 8px; border: 1px solid #333;"></canvas>
+        <canvas id="poincareCanvas" width="500" height="300" style="display: block; border: 1px solid #333;"></canvas>
+        <div id="previewStatus" style="font-size: 0.75rem; color: #666; margin-top: 4px; text-align: center;">Click "Start" then click on the main canvas</div>
+    </div>
+
+    <p id="hintText" style="font-size: 0.8rem; color: #888; margin-top: 8px;">Drag to zoom in · Right-click or button to zoom out</p>
 
     <script type="module" src="/src/main.ts"></script>
 </body>

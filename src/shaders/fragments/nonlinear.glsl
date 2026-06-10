@@ -1,4 +1,5 @@
-// Elastic double pendulum ODE right-hand side
+// Nonlinear elastic double pendulum ODE right-hand side
+// Uses an exponential/stiffening spring model instead of linear Hooke's law
 // Requires uniforms: float u_k1, float u_k2, float u_m1, float u_m2, float u_L1, float u_L2
 // Defines: systemDeriv(sa, sb, out da, out db)
 
@@ -47,6 +48,15 @@ vec4 solveCramer4(mat4 M, vec4 f) {
     return vec4(det4(M0), det4(M1), det4(M2m), det4(M3)) * invDet;
 }
 
+// Nonlinear spring force: exponential stiffening model
+// F = -k * sign(x) * (exp(|x|/L0) - 1)
+// This creates a spring that gets progressively stiffer as it stretches
+float nonlinearSpringForce(float extension, float k, float L0) {
+    float absExt = abs(extension);
+    float forceMag = k * (exp(absExt / L0) - 1.0);
+    return -sign(extension) * forceMag;
+}
+
 void systemDeriv(vec4 sa, vec4 sb, out vec4 da, out vec4 db) {
     float M1 = u_m1;
     float M2 = u_m2;
@@ -69,6 +79,10 @@ void systemDeriv(vec4 sa, vec4 sb, out vec4 da, out vec4 db) {
     M[2][0] = M2*l1*l2*cosD;  M[2][1] = M2 * l2 * sinD;     M[2][2] = M2 * l2sq;            M[2][3] = 0.0;
     M[3][0] = -M2 * l1*sinD;  M[3][1] = M2 * cosD;          M[3][2] = 0.0;                  M[3][3] = M2;
 
+    // Nonlinear spring forces
+    float F_spring1 = nonlinearSpringForce(sa.z, u_k1, L10);
+    float F_spring2 = nonlinearSpringForce(sb.z, u_k2, L20);
+
     vec4 f;
     f.x = -2.0 * TOTAL_M * l1 * sa.w * sa.y
           - 2.0 * M2 * l1 * sb.w * sb.y * cosD
@@ -78,7 +92,7 @@ void systemDeriv(vec4 sa, vec4 sb, out vec4 da, out vec4 db) {
           + M2 * l2 * w2sq * cosD
           - 2.0 * M2 * sb.w * sb.y * sinD
           + TOTAL_M * G * cos(sa.x)
-          - u_k1 * sa.z;
+          + F_spring1;
     f.z = -2.0 * M2 * l2 * sa.w * sa.y * cosD
           - 2.0 * M2 * l2 * sb.w * sb.y
           + M2 * l1 * l2 * w1sq * sinD
@@ -87,7 +101,7 @@ void systemDeriv(vec4 sa, vec4 sb, out vec4 da, out vec4 db) {
           + M2 * l1 * w1sq * cosD
           + M2 * l2 * w2sq
           + M2 * G * cos(sb.x)
-          - u_k2 * sb.z;
+          + F_spring2;
 
     vec4 accel = solveCramer4(M, f);
     da = vec4(sa.y, accel.x, sa.w, accel.y);

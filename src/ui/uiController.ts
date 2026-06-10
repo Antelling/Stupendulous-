@@ -1,5 +1,5 @@
-import type { SimulationConfig, VizMode, Colormap } from '../types/config.ts';
-import { SYSTEM_NAMES, MODE_NAMES } from '../types/config.ts';
+import type { SimulationConfig, Colormap, PhaseSpaceDimension } from '../types/config.ts';
+import { SYSTEM_NAMES, MODE_NAMES, DIMENSION_LABELS, ELASTIC_DIMENSIONS } from '../types/config.ts';
 
 export class UIController {
   private elements: Record<string, HTMLElement> = {};
@@ -11,16 +11,17 @@ export class UIController {
   private cacheElements(): void {
     const ids = [
       'systemType', 'vizMode', 'resolution', 'colormap', 'toneMapping',
-      'theta1Min', 'theta1Max', 'theta2Min', 'theta2Max',
-      'omega1', 'omega2', 'dt', 'iterations', 'maxIter', 'dtDiv',
-      'threshold', 'perturb', 'k1', 'k2',
+      'xDimension', 'yDimension', 'xMin', 'xMax', 'yMin', 'yMax',
+      'initAngle1', 'initVelocity1', 'initAngle2', 'initVelocity2',
+      'initStretch1', 'initStretchRate1', 'initStretch2', 'initStretchRate2',
+      'dt', 'iterations', 'maxIter', 'perturb',
       'resetBtn', 'downloadBtn', 'zoomOutBtn',
       'modeIndicator', 'subtitle', 'legendGradient',
       'frameCount', 'maxDistance', 'fps', 'zoomLevel',
-      'omega1Value', 'omega2Value', 'dtValue', 'iterValue',
-      'dtDivValue', 'thresholdValue', 'perturbValue',
+      'iterValue', 'perturbValue',
+      'm1Value', 'm2Value', 'L1Value', 'L2Value',
       'k1Value', 'k2Value',
-      'distanceControls', 'elasticControls', 'divergenceControls',
+      'elasticControls', 'maxIterControl', 'perturbControl',
       'frameRow', 'maxDistRow',
     ];
 
@@ -61,34 +62,83 @@ export class UIController {
     const isElastic = config.system !== 'rigid';
     const isDivergence = config.vizMode === 'divergence';
 
-    this.setDisplay('distanceControls', isDistance ? 'block' : 'none');
+    this.setDisplay('maxIterControl', isDivergence ? 'block' : 'none');
+    this.setDisplay('perturbControl', isDivergence ? 'block' : 'none');
     this.setDisplay('elasticControls', isElastic ? 'block' : 'none');
-    this.setDisplay('divergenceControls', isDivergence ? 'block' : 'none');
 
-    this.setTextContent('modeIndicator', `${SYSTEM_NAMES[config.system]} \u00b7 ${MODE_NAMES[config.vizMode]}`);
+    const elasticOnly = document.querySelectorAll('.elastic-only');
+    const elasticInitial = document.querySelectorAll('.elastic-initial');
+    for (let i = 0; i < elasticOnly.length; i++) {
+      (elasticOnly[i] as HTMLElement).style.display = isElastic ? 'block' : 'none';
+    }
+    for (let i = 0; i < elasticInitial.length; i++) {
+      (elasticInitial[i] as HTMLElement).style.display = isElastic ? 'block' : 'none';
+    }
 
-    const subtitles: Record<VizMode, string> = {
+    this.setTextContent('modeIndicator', `${SYSTEM_NAMES[config.system]} · ${MODE_NAMES[config.vizMode]}`);
+
+    const subtitles: Record<typeof config.vizMode, string> = {
       distance: isElastic ? 'Total distance traveled by bob2 (elastic system)' : 'Total distance traveled by the second pendulum bob',
       divergence: 'Iterations until perturbed trajectory diverges',
     };
     this.setTextContent('subtitle', subtitles[config.vizMode]);
 
-    this.setDisplay('frameRow', isDivergence ? 'none' : 'block');
-    this.setDisplay('maxDistRow', isDivergence ? 'none' : 'block');
+    this.setDisplay('frameRow', isDivergence ? 'none' : 'inline');
+    this.setDisplay('maxDistRow', isDivergence ? 'none' : 'inline');
+
+    this.ensureDistinctDimensions(config.phaseSpace.x.dimension, config.phaseSpace.y.dimension);
   }
 
   updateLegend(colormap: Colormap): void {
-    const gradient = this.getElement('legendGradient');
+    const gradient = this.getElement('legendGradient') as HTMLElement | null;
     if (gradient) {
-      gradient.className = 'legend-gradient ' + (colormap === 6 ? 'rainbow-gradient' : 'viridis-gradient');
+      gradient.style.background = colormap === 6
+        ? 'linear-gradient(90deg, hsl(0,80%,50%), hsl(60,80%,50%), hsl(120,80%,50%), hsl(180,80%,50%), hsl(240,80%,50%), hsl(300,80%,50%))'
+        : 'linear-gradient(90deg, rgb(68, 1, 84), rgb(33, 145, 140), rgb(253, 231, 37))';
     }
   }
 
-  updateRangeInputs(config: SimulationConfig): void {
-    this.setInputValue('theta1Min', config.theta1Range.min.toFixed(2));
-    this.setInputValue('theta1Max', config.theta1Range.max.toFixed(2));
-    this.setInputValue('theta2Min', config.theta2Range.min.toFixed(2));
-    this.setInputValue('theta2Max', config.theta2Range.max.toFixed(2));
+  updatePhaseSpaceInputs(config: SimulationConfig): void {
+    this.setInputValue('xDimension', config.phaseSpace.x.dimension);
+    this.setInputValue('xMin', config.phaseSpace.x.min.toFixed(2));
+    this.setInputValue('xMax', config.phaseSpace.x.max.toFixed(2));
+    this.setInputValue('yDimension', config.phaseSpace.y.dimension);
+    this.setInputValue('yMin', config.phaseSpace.y.min.toFixed(2));
+    this.setInputValue('yMax', config.phaseSpace.y.max.toFixed(2));
+
+    const iv = config.phaseSpace.initialValues;
+    this.setInputValue('initAngle1', iv.angle1.toFixed(2));
+    this.setInputValue('initVelocity1', iv.velocity1.toFixed(2));
+    this.setInputValue('initAngle2', iv.angle2.toFixed(2));
+    this.setInputValue('initVelocity2', iv.velocity2.toFixed(2));
+    this.setInputValue('initStretch1', iv.stretch1.toFixed(2));
+    this.setInputValue('initStretchRate1', iv.stretchRate1.toFixed(2));
+    this.setInputValue('initStretch2', iv.stretch2.toFixed(2));
+    this.setInputValue('initStretchRate2', iv.stretchRate2.toFixed(2));
+  }
+
+  updatePendulumParams(config: SimulationConfig): void {
+    this.setInputValue('m1', config.m1);
+    this.setTextContent('m1Value', config.m1.toFixed(1));
+    this.setInputValue('m2', config.m2);
+    this.setTextContent('m2Value', config.m2.toFixed(1));
+    this.setInputValue('L1', config.L1);
+    this.setTextContent('L1Value', config.L1.toFixed(1));
+    this.setInputValue('L2', config.L2);
+    this.setTextContent('L2Value', config.L2.toFixed(1));
+    this.setInputValue('k1', config.k1);
+    this.setTextContent('k1Value', String(config.k1));
+    this.setInputValue('k2', config.k2);
+    this.setTextContent('k2Value', String(config.k2));
+  }
+
+  updateIntegrationInputs(config: SimulationConfig): void {
+    this.setInputValue('dt', config.dt.toFixed(4));
+    this.setInputValue('iterations', config.iterationsPerFrame);
+    this.setTextContent('iterValue', String(config.iterationsPerFrame));
+    this.setInputValue('maxIter', config.maxIter);
+    this.setInputValue('perturb', config.perturb);
+    this.setTextContent('perturbValue', config.perturb.toFixed(6));
   }
 
   updateStats(frameCount: number, maxValue: number, fps: number, zoomLevel: number): void {
@@ -96,6 +146,21 @@ export class UIController {
     this.setTextContent('maxDistance', maxValue.toFixed(2));
     this.setTextContent('fps', String(fps));
     this.setTextContent('zoomLevel', String(zoomLevel));
+  }
+
+  ensureDistinctDimensions(xDim: PhaseSpaceDimension, yDim: PhaseSpaceDimension): void {
+    const xSelect = this.getElement('xDimension') as HTMLSelectElement | null;
+    const ySelect = this.getElement('yDimension') as HTMLSelectElement | null;
+    if (!xSelect || !ySelect) return;
+
+    for (let i = 0; i < xSelect.options.length; i++) {
+      const opt = xSelect.options[i];
+      opt.disabled = opt.value === yDim;
+    }
+    for (let i = 0; i < ySelect.options.length; i++) {
+      const opt = ySelect.options[i];
+      opt.disabled = opt.value === xDim;
+    }
   }
 
   bindControl(id: string, callback: (value: string) => void, eventType = 'input'): void {

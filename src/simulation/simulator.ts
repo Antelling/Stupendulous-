@@ -1,4 +1,4 @@
-import type { SimulationConfig } from '../types/config.ts';
+import type { SimulationConfig, PhaseSpaceDimension } from '../types/config.ts';
 import { TextureManager } from '../webgl/textureManager.ts';
 import { FramebufferManager } from '../webgl/framebufferManager.ts';
 import { UniformSetter } from '../webgl/uniformSetter.ts';
@@ -8,13 +8,24 @@ import type { ShaderProgram } from '../types/shaders.ts';
 
 import vertexSource from '../shaders/vertex.glsl?raw';
 
-type SystemKey = 'rigid' | 'elastic';
+type SystemKey = 'rigid' | 'elastic' | 'nonlinear';
 type ModeKey = 'distance' | 'divergence';
 
 interface CompiledProgram {
   program: WebGLProgram;
   vao: WebGLVertexArrayObject;
 }
+
+const DIM_INDEX: Record<PhaseSpaceDimension, number> = {
+  angle1: 0,
+  velocity1: 1,
+  stretch1: 2,
+  stretchRate1: 3,
+  angle2: 4,
+  velocity2: 5,
+  stretch2: 6,
+  stretchRate2: 7,
+};
 
 export class Simulator {
   private gl: WebGL2RenderingContext;
@@ -53,18 +64,18 @@ export class Simulator {
     this.fb = new FramebufferManager(gl);
     this.uniforms = new UniformSetter(gl);
 
-    this.systemKey = config.system === 'rigid' ? 'rigid' : 'elastic';
+    this.systemKey = config.system === 'elastic12' ? 'elastic' : config.system;
     this.modeKey = config.vizMode;
 
     const res = config.resolution;
 
     this.stateAPair = this.textures.createTexturePair(res);
-    if (this.systemKey === 'elastic') {
+    if (this.systemKey === 'elastic' || this.systemKey === 'nonlinear') {
       this.stateBPair = this.textures.createTexturePair(res);
     }
     if (this.modeKey === 'divergence') {
       this.perturbedAPair = this.textures.createTexturePair(res);
-      if (this.systemKey === 'elastic') {
+      if (this.systemKey === 'elastic' || this.systemKey === 'nonlinear') {
         this.perturbedBPair = this.textures.createTexturePair(res);
       }
     }
@@ -113,13 +124,24 @@ export class Simulator {
     return p;
   }
 
-  private getElasticMode(): number {
-    switch (this.config.system) {
-      case 'elastic1': return 0;
-      case 'elastic2': return 1;
-      case 'elastic12': return 2;
-      default: return 0;
+  private setPhaseSpaceUniforms(program: WebGLProgram): void {
+    const ps = this.config.phaseSpace;
+    const iv = ps.initialValues;
+
+    if (this.systemKey === 'rigid') {
+      this.uniforms.set4f(program, 'u_initialState',
+        iv.angle1, iv.velocity1, iv.angle2, iv.velocity2);
+    } else {
+      this.uniforms.set4f(program, 'u_initialA',
+        iv.angle1, iv.velocity1, iv.stretch1, iv.stretchRate1);
+      this.uniforms.set4f(program, 'u_initialB',
+        iv.angle2, iv.velocity2, iv.stretch2, iv.stretchRate2);
     }
+
+    this.uniforms.set2f(program, 'u_xRange', ps.x.min, ps.x.max);
+    this.uniforms.set2f(program, 'u_yRange', ps.y.min, ps.y.max);
+    this.uniforms.set1i(program, 'u_xDim', DIM_INDEX[ps.x.dimension]);
+    this.uniforms.set1i(program, 'u_yDim', DIM_INDEX[ps.y.dimension]);
   }
 
   reset(): void {
@@ -150,13 +172,9 @@ export class Simulator {
 
     gl.useProgram(prog.program);
     gl.bindVertexArray(prog.vao);
-    this.uniforms.set2f(prog.program, 'u_theta1Range', this.config.theta1Range.min, this.config.theta1Range.max);
-    this.uniforms.set2f(prog.program, 'u_theta2Range', this.config.theta2Range.min, this.config.theta2Range.max);
-    this.uniforms.set1f(prog.program, 'u_omega1', this.config.omega1);
-    this.uniforms.set1f(prog.program, 'u_omega2', this.config.omega2);
+    this.setPhaseSpaceUniforms(prog.program);
 
-    if (this.systemKey === 'elastic') {
-      this.uniforms.set1i(prog.program, 'u_elasticMode', this.getElasticMode());
+    if (this.systemKey === 'elastic' || this.systemKey === 'nonlinear') {
       this.fb.attachColor(gl.COLOR_ATTACHMENT0, this.stateAPair[rIdx]);
       this.fb.attachColor(gl.COLOR_ATTACHMENT1, this.stateBPair![rIdx]);
       gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
@@ -176,19 +194,18 @@ export class Simulator {
     gl.useProgram(prog.program);
     gl.bindVertexArray(prog.vao);
 
-    if (this.systemKey === 'elastic') {
+    if (this.systemKey === 'elastic' || this.systemKey === 'nonlinear') {
       this.textures.bindTexture(0, this.stateAPair[rIdx]);
       this.textures.bindTexture(1, this.stateBPair![rIdx]);
       this.uniforms.set1i(prog.program, 'u_stateTextureA', 0);
       this.uniforms.set1i(prog.program, 'u_stateTextureB', 1);
-      this.uniforms.set1i(prog.program, 'u_elasticMode', this.getElasticMode());
     } else {
       this.textures.bindTexture(0, this.stateAPair[rIdx]);
       this.uniforms.set1i(prog.program, 'u_stateTexture', 0);
     }
 
-    this.textures.bindTexture(this.systemKey === 'elastic' ? 2 : 1, this.dataPair[rIdx]);
-    this.uniforms.set1i(prog.program, 'u_distanceTexture', this.systemKey === 'elastic' ? 2 : 1);
+    this.textures.bindTexture(this.systemKey === 'elastic' || this.systemKey === 'nonlinear' ? 2 : 1, this.dataPair[rIdx]);
+    this.uniforms.set1i(prog.program, 'u_distanceTexture', this.systemKey === 'elastic' || this.systemKey === 'nonlinear' ? 2 : 1);
     this.uniforms.set1b(prog.program, 'u_reset', true);
 
     this.fb.attachColor(gl.COLOR_ATTACHMENT0, this.dataPair[wIdx]);
@@ -205,17 +222,13 @@ export class Simulator {
 
     gl.useProgram(prog.program);
     gl.bindVertexArray(prog.vao);
-    this.uniforms.set2f(prog.program, 'u_theta1Range', this.config.theta1Range.min, this.config.theta1Range.max);
-    this.uniforms.set2f(prog.program, 'u_theta2Range', this.config.theta2Range.min, this.config.theta2Range.max);
-    this.uniforms.set1f(prog.program, 'u_omega1', this.config.omega1);
-    this.uniforms.set1f(prog.program, 'u_omega2', this.config.omega2);
+    this.setPhaseSpaceUniforms(prog.program);
     this.uniforms.set1f(prog.program, 'u_perturb', this.config.perturb);
     this.uniforms.set1f(prog.program, 'u_seed', this.config.seed);
 
     const attachments: number[] = [];
 
-    if (this.systemKey === 'elastic') {
-      this.uniforms.set1i(prog.program, 'u_elasticMode', this.getElasticMode());
+    if (this.systemKey === 'elastic' || this.systemKey === 'nonlinear') {
       this.fb.attachColor(gl.COLOR_ATTACHMENT0, this.stateAPair[rIdx]);
       this.fb.attachColor(gl.COLOR_ATTACHMENT1, this.stateBPair![rIdx]);
       this.fb.attachColor(gl.COLOR_ATTACHMENT2, this.perturbedAPair![rIdx]);
@@ -261,14 +274,19 @@ export class Simulator {
     gl.useProgram(prog.program);
     gl.bindVertexArray(prog.vao);
 
-    if (this.systemKey === 'elastic') {
+    if (this.systemKey === 'elastic' || this.systemKey === 'nonlinear') {
       this.textures.bindTexture(0, this.stateAPair[rIdx]);
       this.textures.bindTexture(1, this.stateBPair![rIdx]);
       this.uniforms.set1i(prog.program, 'u_stateTextureA', 0);
       this.uniforms.set1i(prog.program, 'u_stateTextureB', 1);
-      this.uniforms.set1i(prog.program, 'u_elasticMode', this.getElasticMode());
       this.uniforms.set1f(prog.program, 'u_k1', this.config.k1);
       this.uniforms.set1f(prog.program, 'u_k2', this.config.k2);
+      this.uniforms.set1f(prog.program, 'u_m1', this.config.m1);
+      this.uniforms.set1f(prog.program, 'u_m2', this.config.m2);
+      this.uniforms.set1f(prog.program, 'u_L1', this.config.L1);
+      this.uniforms.set1f(prog.program, 'u_L2', this.config.L2);
+
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, null, 0);
 
       this.fb.attachColor(gl.COLOR_ATTACHMENT0, this.stateAPair[wIdx]);
       this.fb.attachColor(gl.COLOR_ATTACHMENT1, this.stateBPair![wIdx]);
@@ -276,6 +294,12 @@ export class Simulator {
     } else {
       this.textures.bindTexture(0, this.stateAPair[rIdx]);
       this.uniforms.set1i(prog.program, 'u_stateTexture', 0);
+      this.uniforms.set1f(prog.program, 'u_m1', this.config.m1);
+      this.uniforms.set1f(prog.program, 'u_m2', this.config.m2);
+      this.uniforms.set1f(prog.program, 'u_L1', this.config.L1);
+      this.uniforms.set1f(prog.program, 'u_L2', this.config.L2);
+
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, null, 0);
 
       this.fb.attachColor(gl.COLOR_ATTACHMENT0, this.stateAPair[wIdx]);
       gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
@@ -293,14 +317,13 @@ export class Simulator {
     gl.useProgram(prog.program);
     gl.bindVertexArray(prog.vao);
 
-    if (this.systemKey === 'elastic') {
+    if (this.systemKey === 'elastic' || this.systemKey === 'nonlinear') {
       this.textures.bindTexture(0, this.stateAPair[stateIdx]);
       this.textures.bindTexture(1, this.stateBPair![stateIdx]);
       this.textures.bindTexture(2, this.dataPair[dataReadIdx]);
       this.uniforms.set1i(prog.program, 'u_stateTextureA', 0);
       this.uniforms.set1i(prog.program, 'u_stateTextureB', 1);
       this.uniforms.set1i(prog.program, 'u_distanceTexture', 2);
-      this.uniforms.set1i(prog.program, 'u_elasticMode', this.getElasticMode());
     } else {
       this.textures.bindTexture(0, this.stateAPair[stateIdx]);
       this.textures.bindTexture(1, this.dataPair[dataReadIdx]);
@@ -309,6 +332,11 @@ export class Simulator {
     }
 
     this.uniforms.set1b(prog.program, 'u_reset', false);
+
+    if (this.systemKey === 'elastic' || this.systemKey === 'nonlinear') {
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, null, 0);
+    }
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, null, 0);
 
     this.fb.attachColor(gl.COLOR_ATTACHMENT0, this.dataPair[dataWriteIdx]);
     gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
@@ -375,7 +403,7 @@ export class Simulator {
     gl.useProgram(prog.program);
     gl.bindVertexArray(prog.vao);
 
-    if (this.systemKey === 'elastic') {
+    if (this.systemKey === 'elastic' || this.systemKey === 'nonlinear') {
       this.textures.bindTexture(0, this.stateAPair[rIdx]);
       this.textures.bindTexture(1, this.stateBPair![rIdx]);
       this.textures.bindTexture(2, this.perturbedAPair![rIdx]);
@@ -388,9 +416,12 @@ export class Simulator {
       this.uniforms.set1i(prog.program, 'u_pertTextureB', 3);
       this.uniforms.set1i(prog.program, 'u_divergenceTexture', 4);
 
-      this.uniforms.set1i(prog.program, 'u_elasticMode', this.getElasticMode());
       this.uniforms.set1f(prog.program, 'u_k1', this.config.k1);
       this.uniforms.set1f(prog.program, 'u_k2', this.config.k2);
+      this.uniforms.set1f(prog.program, 'u_m1', this.config.m1);
+      this.uniforms.set1f(prog.program, 'u_m2', this.config.m2);
+      this.uniforms.set1f(prog.program, 'u_L1', this.config.L1);
+      this.uniforms.set1f(prog.program, 'u_L2', this.config.L2);
 
       this.fb.attachColor(gl.COLOR_ATTACHMENT0, this.stateAPair[wIdx]);
       this.fb.attachColor(gl.COLOR_ATTACHMENT1, this.stateBPair![wIdx]);
@@ -409,6 +440,10 @@ export class Simulator {
       this.uniforms.set1i(prog.program, 'u_stateTexture', 0);
       this.uniforms.set1i(prog.program, 'u_perturbedTexture', 1);
       this.uniforms.set1i(prog.program, 'u_divergenceTexture', 2);
+      this.uniforms.set1f(prog.program, 'u_m1', this.config.m1);
+      this.uniforms.set1f(prog.program, 'u_m2', this.config.m2);
+      this.uniforms.set1f(prog.program, 'u_L1', this.config.L1);
+      this.uniforms.set1f(prog.program, 'u_L2', this.config.L2);
 
       this.fb.attachColor(gl.COLOR_ATTACHMENT0, this.stateAPair[wIdx]);
       this.fb.attachColor(gl.COLOR_ATTACHMENT1, this.perturbedAPair![wIdx]);
@@ -417,7 +452,6 @@ export class Simulator {
     }
 
     this.uniforms.set1f(prog.program, 'u_dt', this.config.dt);
-    this.uniforms.set1f(prog.program, 'u_threshold', this.config.threshold);
     this.uniforms.set1i(prog.program, 'u_currentIter', this.frameCount);
 
     gl.viewport(0, 0, res, res);

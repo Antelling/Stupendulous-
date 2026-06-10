@@ -1,55 +1,103 @@
 import rigidFrag from '../shaders/fragments/rigid.glsl?raw';
 import elasticFrag from '../shaders/fragments/elastic.glsl?raw';
+import nonlinearFrag from '../shaders/fragments/nonlinear.glsl?raw';
 import bob2Frag from '../shaders/fragments/bob2.glsl?raw';
 import hashFrag from '../shaders/fragments/hash.glsl?raw';
 
-type System = 'rigid' | 'elastic';
+import type { PhaseSpaceDimension } from '../types/config.ts';
+
+type System = 'rigid' | 'elastic' | 'nonlinear';
 type Mode = 'distance' | 'divergence';
 
 const HEADER = `#version 300 es
 precision highp float;
 `;
 
+const DIM_INDEX: Record<PhaseSpaceDimension, number> = {
+  angle1: 0,
+  velocity1: 1,
+  stretch1: 2,
+  stretchRate1: 3,
+  angle2: 4,
+  velocity2: 5,
+  stretch2: 6,
+  stretchRate2: 7,
+};
+
 export class ShaderBuilder {
   static buildInit(system: System, mode: Mode): string {
     if (system === 'rigid') return mode === 'distance' ? this.rigidDistanceInit() : this.rigidDivergenceInit();
+    if (system === 'nonlinear') return mode === 'distance' ? this.nonlinearDistanceInit() : this.nonlinearDivergenceInit();
     return mode === 'distance' ? this.elasticDistanceInit() : this.elasticDivergenceInit();
   }
 
   static buildPhysics(system: System): string {
-    return system === 'rigid' ? this.rigidPhysics() : this.elasticPhysics();
+    if (system === 'rigid') return this.rigidPhysics();
+    if (system === 'nonlinear') return this.nonlinearPhysics();
+    return this.elasticPhysics();
   }
 
   static buildAccumulate(system: System): string {
-    return system === 'rigid' ? this.rigidAccumulate() : this.elasticAccumulate();
+    if (system === 'rigid') return this.rigidAccumulate();
+    if (system === 'nonlinear') return this.nonlinearAccumulate();
+    return this.elasticAccumulate();
   }
 
   static buildDivergenceStep(system: System): string {
-    return system === 'rigid' ? this.rigidDivergenceStep() : this.elasticDivergenceStep();
+    if (system === 'rigid') return this.rigidDivergenceStep();
+    if (system === 'nonlinear') return this.nonlinearDivergenceStep();
+    return this.elasticDivergenceStep();
+  }
+
+  private static mappingHelpers(): string {
+    return `
+void applyMapping(inout vec4 a, inout vec4 b, int dim, float value) {
+    if (dim == 0) a.x += value;
+    else if (dim == 1) a.y += value;
+    else if (dim == 2) a.z += value;
+    else if (dim == 3) a.w += value;
+    else if (dim == 4) b.x += value;
+    else if (dim == 5) b.y += value;
+    else if (dim == 6) b.z += value;
+    else if (dim == 7) b.w += value;
+}
+`;
   }
 
   private static rigidDistanceInit(): string {
     return `${HEADER}
-uniform vec2 u_theta1Range;
-uniform vec2 u_theta2Range;
-uniform float u_omega1;
-uniform float u_omega2;
+uniform vec4 u_initialState;
+uniform vec2 u_xRange;
+uniform vec2 u_yRange;
+uniform int u_xDim;
+uniform int u_yDim;
 in vec2 v_uv;
-out vec4 fragColor;
+layout(location = 0) out vec4 fragColor;
 
 void main() {
-    float theta1 = mix(u_theta1Range.x, u_theta1Range.y, v_uv.x);
-    float theta2 = mix(u_theta2Range.x, u_theta2Range.y, v_uv.y);
-    fragColor = vec4(theta1, u_omega1, theta2, u_omega2);
+    vec4 state = u_initialState;
+    float dx = mix(u_xRange.x, u_xRange.y, v_uv.x);
+    float dy = mix(u_yRange.x, u_yRange.y, v_uv.y);
+    // rigid state layout: (angle1, velocity1, angle2, velocity2)
+    if (u_xDim == 0) state.x += dx;
+    else if (u_xDim == 1) state.y += dx;
+    else if (u_xDim == 4) state.z += dx;
+    else if (u_xDim == 5) state.w += dx;
+    if (u_yDim == 0) state.x += dy;
+    else if (u_yDim == 1) state.y += dy;
+    else if (u_yDim == 4) state.z += dy;
+    else if (u_yDim == 5) state.w += dy;
+    fragColor = state;
 }`;
   }
 
   private static rigidDivergenceInit(): string {
     return `${HEADER}
-uniform vec2 u_theta1Range;
-uniform vec2 u_theta2Range;
-uniform float u_omega1;
-uniform float u_omega2;
+uniform vec4 u_initialState;
+uniform vec2 u_xRange;
+uniform vec2 u_yRange;
+uniform int u_xDim;
+uniform int u_yDim;
 uniform float u_perturb;
 uniform float u_seed;
 in vec2 v_uv;
@@ -60,51 +108,67 @@ layout(location = 2) out vec4 divergenceData;
 ${hashFrag}
 
 void main() {
-    float theta1 = mix(u_theta1Range.x, u_theta1Range.y, v_uv.x);
-    float theta2 = mix(u_theta2Range.x, u_theta2Range.y, v_uv.y);
+    vec4 state = u_initialState;
+    float dx = mix(u_xRange.x, u_xRange.y, v_uv.x);
+    float dy = mix(u_yRange.x, u_yRange.y, v_uv.y);
+    // rigid state layout: (angle1, velocity1, angle2, velocity2)
+    if (u_xDim == 0) state.x += dx;
+    else if (u_xDim == 1) state.y += dx;
+    else if (u_xDim == 4) state.z += dx;
+    else if (u_xDim == 5) state.w += dx;
+    if (u_yDim == 0) state.x += dy;
+    else if (u_yDim == 1) state.y += dy;
+    else if (u_yDim == 4) state.z += dy;
+    else if (u_yDim == 5) state.w += dy;
+
     float r = hash(v_uv * 1000.0 + u_seed);
     float perturb_theta1 = (r - 0.5) * 2.0 * u_perturb;
     float perturb_theta2 = (hash(v_uv * 1000.0 + vec2(100.0, u_seed)) - 0.5) * 2.0 * u_perturb;
-    baseState = vec4(theta1, u_omega1, theta2, u_omega2);
-    perturbedState = vec4(theta1 + perturb_theta1, u_omega1, theta2 + perturb_theta2, u_omega2);
+
+    baseState = state;
+    perturbedState = state + vec4(perturb_theta1, 0.0, perturb_theta2, 0.0);
     divergenceData = vec4(0.0, 0.0, 0.0, 1.0);
 }`;
   }
 
   private static elasticDistanceInit(): string {
     return `${HEADER}
-uniform vec2 u_theta1Range;
-uniform vec2 u_theta2Range;
-uniform float u_omega1;
-uniform float u_omega2;
-uniform int u_elasticMode;
+uniform vec4 u_initialA;
+uniform vec4 u_initialB;
+uniform vec2 u_xRange;
+uniform vec2 u_yRange;
+uniform int u_xDim;
+uniform int u_yDim;
 in vec2 v_uv;
 layout(location = 0) out vec4 stateA;
 layout(location = 1) out vec4 stateB;
 
+${this.mappingHelpers()}
+
 void main() {
-    float theta1 = mix(u_theta1Range.x, u_theta1Range.y, v_uv.x);
-    float theta2 = mix(u_theta2Range.x, u_theta2Range.y, v_uv.y);
-    if (u_elasticMode == 0) {
-        stateA = vec4(theta1, u_omega1, 0.0, 0.0);
-        stateB = vec4(theta2, u_omega2, 0.0, 1.0);
-    } else if (u_elasticMode == 1) {
-        stateA = vec4(theta1, u_omega1, theta2, u_omega2);
-        stateB = vec4(0.0, 0.0, 0.0, 1.0);
-    } else {
-        stateA = vec4(theta1, u_omega1, 0.0, 0.0);
-        stateB = vec4(theta2, u_omega2, 0.0, 0.0);
-    }
+    vec4 a = u_initialA;
+    vec4 b = u_initialB;
+    float dx = mix(u_xRange.x, u_xRange.y, v_uv.x);
+    float dy = mix(u_yRange.x, u_yRange.y, v_uv.y);
+    applyMapping(a, b, u_xDim, dx);
+    applyMapping(a, b, u_yDim, dy);
+    stateA = a;
+    stateB = b;
 }`;
   }
 
-  private static elasticDivergenceInit(): string {
+  private static nonlinearDistanceInit(): string {
+    return this.elasticDistanceInit();
+  }
+
+  private static nonlinearDivergenceInit(): string {
     return `${HEADER}
-uniform vec2 u_theta1Range;
-uniform vec2 u_theta2Range;
-uniform float u_omega1;
-uniform float u_omega2;
-uniform int u_elasticMode;
+uniform vec4 u_initialA;
+uniform vec4 u_initialB;
+uniform vec2 u_xRange;
+uniform vec2 u_yRange;
+uniform int u_xDim;
+uniform int u_yDim;
 uniform float u_perturb;
 uniform float u_seed;
 in vec2 v_uv;
@@ -115,32 +179,65 @@ layout(location = 3) out vec4 pertB;
 layout(location = 4) out vec4 divergenceData;
 
 ${hashFrag}
+${this.mappingHelpers()}
 
 void main() {
-    float theta1 = mix(u_theta1Range.x, u_theta1Range.y, v_uv.x);
-    float theta2 = mix(u_theta2Range.x, u_theta2Range.y, v_uv.y);
+    vec4 a = u_initialA;
+    vec4 b = u_initialB;
+    float dx = mix(u_xRange.x, u_xRange.y, v_uv.x);
+    float dy = mix(u_yRange.x, u_yRange.y, v_uv.y);
+    applyMapping(a, b, u_xDim, dx);
+    applyMapping(a, b, u_yDim, dy);
+
     float r = hash(v_uv * 1000.0 + u_seed);
     float perturb_theta1 = (r - 0.5) * 2.0 * u_perturb;
     float perturb_theta2 = (hash(v_uv * 1000.0 + vec2(100.0, u_seed)) - 0.5) * 2.0 * u_perturb;
-    float pt1 = theta1 + perturb_theta1;
-    float pt2 = theta2 + perturb_theta2;
 
-    if (u_elasticMode == 0) {
-        baseA = vec4(theta1, u_omega1, 0.0, 0.0);
-        baseB = vec4(theta2, u_omega2, 0.0, 1.0);
-        pertA = vec4(pt1, u_omega1, 0.0, 0.0);
-        pertB = vec4(pt2, u_omega2, 0.0, 1.0);
-    } else if (u_elasticMode == 1) {
-        baseA = vec4(theta1, u_omega1, theta2, u_omega2);
-        baseB = vec4(0.0, 0.0, 0.0, 1.0);
-        pertA = vec4(pt1, u_omega1, pt2, u_omega2);
-        pertB = vec4(0.0, 0.0, 0.0, 1.0);
-    } else {
-        baseA = vec4(theta1, u_omega1, 0.0, 0.0);
-        baseB = vec4(theta2, u_omega2, 0.0, 0.0);
-        pertA = vec4(pt1, u_omega1, 0.0, 0.0);
-        pertB = vec4(pt2, u_omega2, 0.0, 0.0);
-    }
+    baseA = a;
+    baseB = b;
+    pertA = a + vec4(perturb_theta1, 0.0, 0.0, 0.0);
+    pertB = b + vec4(perturb_theta2, 0.0, 0.0, 0.0);
+
+    divergenceData = vec4(0.0, 0.0, 0.0, 1.0);
+}`;
+  }
+
+  private static elasticDivergenceInit(): string {
+    return `${HEADER}
+uniform vec4 u_initialA;
+uniform vec4 u_initialB;
+uniform vec2 u_xRange;
+uniform vec2 u_yRange;
+uniform int u_xDim;
+uniform int u_yDim;
+uniform float u_perturb;
+uniform float u_seed;
+in vec2 v_uv;
+layout(location = 0) out vec4 baseA;
+layout(location = 1) out vec4 baseB;
+layout(location = 2) out vec4 pertA;
+layout(location = 3) out vec4 pertB;
+layout(location = 4) out vec4 divergenceData;
+
+${hashFrag}
+${this.mappingHelpers()}
+
+void main() {
+    vec4 a = u_initialA;
+    vec4 b = u_initialB;
+    float dx = mix(u_xRange.x, u_xRange.y, v_uv.x);
+    float dy = mix(u_yRange.x, u_yRange.y, v_uv.y);
+    applyMapping(a, b, u_xDim, dx);
+    applyMapping(a, b, u_yDim, dy);
+
+    float r = hash(v_uv * 1000.0 + u_seed);
+    float perturb_theta1 = (r - 0.5) * 2.0 * u_perturb;
+    float perturb_theta2 = (hash(v_uv * 1000.0 + vec2(100.0, u_seed)) - 0.5) * 2.0 * u_perturb;
+
+    baseA = a;
+    baseB = b;
+    pertA = a + vec4(perturb_theta1, 0.0, 0.0, 0.0);
+    pertB = b + vec4(perturb_theta2, 0.0, 0.0, 0.0);
 
     divergenceData = vec4(0.0, 0.0, 0.0, 1.0);
 }`;
@@ -150,6 +247,10 @@ void main() {
     return `${HEADER}
 uniform sampler2D u_stateTexture;
 uniform float u_dt;
+uniform float u_m1;
+uniform float u_m2;
+uniform float u_L1;
+uniform float u_L2;
 in vec2 v_uv;
 out vec4 fragColor;
 
@@ -177,9 +278,12 @@ void main() {
 uniform sampler2D u_stateTextureA;
 uniform sampler2D u_stateTextureB;
 uniform float u_dt;
-uniform int u_elasticMode;
 uniform float u_k1;
 uniform float u_k2;
+uniform float u_m1;
+uniform float u_m2;
+uniform float u_L1;
+uniform float u_L2;
 in vec2 v_uv;
 layout(location = 0) out vec4 outStateA;
 layout(location = 1) out vec4 outStateB;
@@ -190,35 +294,48 @@ void main() {
     vec4 sa = texture(u_stateTextureA, v_uv);
     vec4 sb = texture(u_stateTextureB, v_uv);
 
-    vec4 ca, cb;
-    if (u_elasticMode == 0) {
-        ca = sa; cb = vec4(sb.x, sb.y, 0.0, 0.0);
-    } else if (u_elasticMode == 1) {
-        ca = vec4(sa.x, sa.y, 0.0, 0.0); cb = vec4(sa.z, sa.w, sb.x, sb.y);
-    } else {
-        ca = sa; cb = sb;
-    }
+    float dt = u_dt;
+    vec4 da1, db1, da2, db2, da3, db3, da4, db4;
+    systemDeriv(sa, sb, da1, db1);
+    systemDeriv(sa + 0.5*dt*da1, sb + 0.5*dt*db1, da2, db2);
+    systemDeriv(sa + 0.5*dt*da2, sb + 0.5*dt*db2, da3, db3);
+    systemDeriv(sa + dt*da3, sb + dt*db3, da4, db4);
+
+    outStateA = sa + (dt / 6.0) * (da1 + 2.0*da2 + 2.0*da3 + da4);
+    outStateB = sb + (dt / 6.0) * (db1 + 2.0*db2 + 2.0*db3 + db4);
+}`;
+  }
+
+  private static nonlinearPhysics(): string {
+    return `${HEADER}
+uniform sampler2D u_stateTextureA;
+uniform sampler2D u_stateTextureB;
+uniform float u_dt;
+uniform float u_k1;
+uniform float u_k2;
+uniform float u_m1;
+uniform float u_m2;
+uniform float u_L1;
+uniform float u_L2;
+in vec2 v_uv;
+layout(location = 0) out vec4 outStateA;
+layout(location = 1) out vec4 outStateB;
+
+${nonlinearFrag}
+
+void main() {
+    vec4 sa = texture(u_stateTextureA, v_uv);
+    vec4 sb = texture(u_stateTextureB, v_uv);
 
     float dt = u_dt;
     vec4 da1, db1, da2, db2, da3, db3, da4, db4;
-    systemDeriv(ca, cb, da1, db1);
-    systemDeriv(ca + 0.5*dt*da1, cb + 0.5*dt*db1, da2, db2);
-    systemDeriv(ca + 0.5*dt*da2, cb + 0.5*dt*db2, da3, db3);
-    systemDeriv(ca + dt*da3, cb + dt*db3, da4, db4);
+    systemDeriv(sa, sb, da1, db1);
+    systemDeriv(sa + 0.5*dt*da1, sb + 0.5*dt*db1, da2, db2);
+    systemDeriv(sa + 0.5*dt*da2, sb + 0.5*dt*db2, da3, db3);
+    systemDeriv(sa + dt*da3, sb + dt*db3, da4, db4);
 
-    vec4 newCA = ca + (dt / 6.0) * (da1 + 2.0*da2 + 2.0*da3 + da4);
-    vec4 newCB = cb + (dt / 6.0) * (db1 + 2.0*db2 + 2.0*db3 + db4);
-
-    if (u_elasticMode == 0) {
-        outStateA = newCA;
-        outStateB = vec4(newCB.x, newCB.y, 0.0, 1.0);
-    } else if (u_elasticMode == 1) {
-        outStateA = vec4(newCA.x, newCA.y, newCB.x, newCB.y);
-        outStateB = vec4(newCB.z, newCB.w, 0.0, 1.0);
-    } else {
-        outStateA = newCA;
-        outStateB = newCB;
-    }
+    outStateA = sa + (dt / 6.0) * (da1 + 2.0*da2 + 2.0*da3 + da4);
+    outStateB = sb + (dt / 6.0) * (db1 + 2.0*db2 + 2.0*db3 + db4);
 }`;
   }
 
@@ -255,7 +372,6 @@ uniform sampler2D u_stateTextureA;
 uniform sampler2D u_stateTextureB;
 uniform sampler2D u_distanceTexture;
 uniform bool u_reset;
-uniform int u_elasticMode;
 in vec2 v_uv;
 out vec4 fragColor;
 
@@ -265,14 +381,37 @@ void main() {
     vec4 sa = texture(u_stateTextureA, v_uv);
     vec4 sb = texture(u_stateTextureB, v_uv);
 
-    float theta1, theta2, r1, r2;
-    if (u_elasticMode == 0) {
-        theta1 = sa.x; theta2 = sb.x; r1 = sa.z; r2 = 0.0;
-    } else if (u_elasticMode == 1) {
-        theta1 = sa.x; theta2 = sa.z; r1 = 0.0; r2 = sb.x;
-    } else {
-        theta1 = sa.x; theta2 = sb.x; r1 = sa.z; r2 = sb.z;
-    }
+    float theta1 = sa.x, theta2 = sb.x, r1 = sa.z, r2 = sb.z;
+
+    float bx2, by2;
+    computeBob2(theta1, theta2, 1.0 + r1, 1.0 + r2, bx2, by2);
+
+    vec4 prevData = texture(u_distanceTexture, v_uv);
+    float totalDist = prevData.z;
+    float valid = prevData.w;
+
+    float newDist = (u_reset || valid < 0.5) ? 0.0
+        : totalDist + sqrt((bx2-prevData.x)*(bx2-prevData.x) + (by2-prevData.y)*(by2-prevData.y));
+    fragColor = vec4(bx2, by2, newDist, 1.0);
+}`;
+  }
+
+  private static nonlinearAccumulate(): string {
+    return `${HEADER}
+uniform sampler2D u_stateTextureA;
+uniform sampler2D u_stateTextureB;
+uniform sampler2D u_distanceTexture;
+uniform bool u_reset;
+in vec2 v_uv;
+out vec4 fragColor;
+
+${bob2Frag}
+
+void main() {
+    vec4 sa = texture(u_stateTextureA, v_uv);
+    vec4 sb = texture(u_stateTextureB, v_uv);
+
+    float theta1 = sa.x, theta2 = sb.x, r1 = sa.z, r2 = sb.z;
 
     float bx2, by2;
     computeBob2(theta1, theta2, 1.0 + r1, 1.0 + r2, bx2, by2);
@@ -293,8 +432,11 @@ uniform sampler2D u_stateTexture;
 uniform sampler2D u_perturbedTexture;
 uniform sampler2D u_divergenceTexture;
 uniform float u_dt;
-uniform float u_threshold;
 uniform int u_currentIter;
+uniform float u_m1;
+uniform float u_m2;
+uniform float u_L1;
+uniform float u_L2;
 in vec2 v_uv;
 layout(location = 0) out vec4 baseState;
 layout(location = 1) out vec4 perturbedState;
@@ -343,7 +485,7 @@ void main() {
 
     if (hasDiv < 0.5) {
         float dist = measureDivergence(bt1, bo1, bt2, bo2, pt1, po1, pt2, po2);
-        if (dist > u_threshold) {
+        if (dist > 0.05) {
             iter = float(u_currentIter);
             hasDiv = 1.0;
         }
@@ -363,11 +505,13 @@ uniform sampler2D u_pertTextureA;
 uniform sampler2D u_pertTextureB;
 uniform sampler2D u_divergenceTexture;
 uniform float u_dt;
-uniform float u_threshold;
 uniform int u_currentIter;
-uniform int u_elasticMode;
 uniform float u_k1;
 uniform float u_k2;
+uniform float u_m1;
+uniform float u_m2;
+uniform float u_L1;
+uniform float u_L2;
 in vec2 v_uv;
 layout(location = 0) out vec4 outBaseA;
 layout(location = 1) out vec4 outBaseB;
@@ -387,60 +531,25 @@ float circularDiff(float a, float b) {
 float measureElasticDivergence(vec4 bA, vec4 bB, vec4 pA, vec4 pB) {
     float d_t1 = circularDiff(bA.x, pA.x);
     float d_o1 = bA.y - pA.y;
-    float dist_sq = d_t1 * d_t1 + d_o1 * d_o1;
-
-    if (u_elasticMode == 0) {
-        float d_t2 = circularDiff(bB.x, pB.x);
-        float d_o2 = bB.y - pB.y;
-        float d_r1 = bA.z - pA.z;
-        float d_rd1 = bA.w - pA.w;
-        dist_sq += d_t2*d_t2 + d_o2*d_o2 + d_r1*d_r1 + d_rd1*d_rd1;
-    } else if (u_elasticMode == 1) {
-        float d_t2 = circularDiff(bA.z, pA.z);
-        float d_o2 = bA.w - pA.w;
-        float d_r2 = bB.x - pB.x;
-        float d_rd2 = bB.y - pB.y;
-        dist_sq += d_t2*d_t2 + d_o2*d_o2 + d_r2*d_r2 + d_rd2*d_rd2;
-    } else {
-        float d_t2 = circularDiff(bB.x, pB.x);
-        float d_o2 = bB.y - pB.y;
-        float d_r1 = bA.z - pA.z;
-        float d_rd1 = bA.w - pA.w;
-        float d_r2 = bB.z - pB.z;
-        float d_rd2 = bB.w - pB.w;
-        dist_sq += d_t2*d_t2 + d_o2*d_o2 + d_r1*d_r1 + d_rd1*d_rd1 + d_r2*d_r2 + d_rd2*d_rd2;
-    }
-
-    return sqrt(dist_sq);
+    float d_t2 = circularDiff(bB.x, pB.x);
+    float d_o2 = bB.y - pB.y;
+    float d_r1 = bA.z - pA.z;
+    float d_rd1 = bA.w - pA.w;
+    float d_r2 = bB.z - pB.z;
+    float d_rd2 = bB.w - pB.w;
+    return sqrt(d_t1*d_t1 + d_o1*d_o1 + d_t2*d_t2 + d_o2*d_o2 + d_r1*d_r1 + d_rd1*d_rd1 + d_r2*d_r2 + d_rd2*d_rd2);
 }
 
 void elasticStep(vec4 sa, vec4 sb, out vec4 newSA, out vec4 newSB) {
-    vec4 ca, cb;
-    if (u_elasticMode == 0) {
-        ca = sa; cb = vec4(sb.x, sb.y, 0.0, 0.0);
-    } else if (u_elasticMode == 1) {
-        ca = vec4(sa.x, sa.y, 0.0, 0.0); cb = vec4(sa.z, sa.w, sb.x, sb.y);
-    } else {
-        ca = sa; cb = sb;
-    }
-
     float dt = u_dt;
     vec4 da1, db1, da2, db2, da3, db3, da4, db4;
-    systemDeriv(ca, cb, da1, db1);
-    systemDeriv(ca + 0.5*dt*da1, cb + 0.5*dt*db1, da2, db2);
-    systemDeriv(ca + 0.5*dt*da2, cb + 0.5*dt*db2, da3, db3);
-    systemDeriv(ca + dt*da3, cb + dt*db3, da4, db4);
+    systemDeriv(sa, sb, da1, db1);
+    systemDeriv(sa + 0.5*dt*da1, sb + 0.5*dt*db1, da2, db2);
+    systemDeriv(sa + 0.5*dt*da2, sb + 0.5*dt*db2, da3, db3);
+    systemDeriv(sa + dt*da3, sb + dt*db3, da4, db4);
 
-    vec4 newCA = ca + (dt / 6.0) * (da1 + 2.0*da2 + 2.0*da3 + da4);
-    vec4 newCB = cb + (dt / 6.0) * (db1 + 2.0*db2 + 2.0*db3 + db4);
-
-    if (u_elasticMode == 0) {
-        newSA = newCA; newSB = vec4(newCB.x, newCB.y, 0.0, 1.0);
-    } else if (u_elasticMode == 1) {
-        newSA = vec4(newCA.x, newCA.y, newCB.x, newCB.y); newSB = vec4(newCB.z, newCB.w, 0.0, 1.0);
-    } else {
-        newSA = newCA; newSB = newCB;
-    }
+    newSA = sa + (dt / 6.0) * (da1 + 2.0*da2 + 2.0*da3 + da4);
+    newSB = sb + (dt / 6.0) * (db1 + 2.0*db2 + 2.0*db3 + db4);
 }
 
 void main() {
@@ -459,7 +568,92 @@ void main() {
 
     if (hasDiv < 0.5) {
         float dist = measureElasticDivergence(newBA, newBB, newPA, newPB);
-        if (dist > u_threshold) {
+        if (dist > 0.05) {
+            iter = float(u_currentIter);
+            hasDiv = 1.0;
+        }
+    }
+
+    outBaseA = newBA;
+    outBaseB = newBB;
+    outPertA = newPA;
+    outPertB = newPB;
+    divergenceData = vec4(iter, hasDiv, 0.0, 1.0);
+}`;
+  }
+
+  private static nonlinearDivergenceStep(): string {
+    return `${HEADER}
+uniform sampler2D u_baseTextureA;
+uniform sampler2D u_baseTextureB;
+uniform sampler2D u_pertTextureA;
+uniform sampler2D u_pertTextureB;
+uniform sampler2D u_divergenceTexture;
+uniform float u_dt;
+uniform int u_currentIter;
+uniform float u_k1;
+uniform float u_k2;
+uniform float u_m1;
+uniform float u_m2;
+uniform float u_L1;
+uniform float u_L2;
+in vec2 v_uv;
+layout(location = 0) out vec4 outBaseA;
+layout(location = 1) out vec4 outBaseB;
+layout(location = 2) out vec4 outPertA;
+layout(location = 3) out vec4 outPertB;
+layout(location = 4) out vec4 divergenceData;
+
+const float PI = 3.14159265359;
+
+${nonlinearFrag}
+
+float circularDiff(float a, float b) {
+    float d = a - b;
+    return d - 2.0 * PI * floor(d / (2.0 * PI) + 0.5);
+}
+
+float measureElasticDivergence(vec4 bA, vec4 bB, vec4 pA, vec4 pB) {
+    float d_t1 = circularDiff(bA.x, pA.x);
+    float d_o1 = bA.y - pA.y;
+    float d_t2 = circularDiff(bB.x, pB.x);
+    float d_o2 = bB.y - pB.y;
+    float d_r1 = bA.z - pA.z;
+    float d_rd1 = bA.w - pA.w;
+    float d_r2 = bB.z - pB.z;
+    float d_rd2 = bB.w - pB.w;
+    return sqrt(d_t1*d_t1 + d_o1*d_o1 + d_t2*d_t2 + d_o2*d_o2 + d_r1*d_r1 + d_rd1*d_rd1 + d_r2*d_r2 + d_rd2*d_rd2);
+}
+
+void elasticStep(vec4 sa, vec4 sb, out vec4 newSA, out vec4 newSB) {
+    float dt = u_dt;
+    vec4 da1, db1, da2, db2, da3, db3, da4, db4;
+    systemDeriv(sa, sb, da1, db1);
+    systemDeriv(sa + 0.5*dt*da1, sb + 0.5*dt*db1, da2, db2);
+    systemDeriv(sa + 0.5*dt*da2, sb + 0.5*dt*db2, da3, db3);
+    systemDeriv(sa + dt*da3, sb + dt*db3, da4, db4);
+
+    newSA = sa + (dt / 6.0) * (da1 + 2.0*da2 + 2.0*da3 + da4);
+    newSB = sb + (dt / 6.0) * (db1 + 2.0*db2 + 2.0*db3 + db4);
+}
+
+void main() {
+    vec4 bA = texture(u_baseTextureA, v_uv);
+    vec4 bB = texture(u_baseTextureB, v_uv);
+    vec4 pA = texture(u_pertTextureA, v_uv);
+    vec4 pB = texture(u_pertTextureB, v_uv);
+    vec4 div = texture(u_divergenceTexture, v_uv);
+
+    float iter = div.r;
+    float hasDiv = div.g;
+
+    vec4 newBA, newBB, newPA, newPB;
+    elasticStep(bA, bB, newBA, newBB);
+    elasticStep(pA, pB, newPA, newPB);
+
+    if (hasDiv < 0.5) {
+        float dist = measureElasticDivergence(newBA, newBB, newPA, newPB);
+        if (dist > 0.05) {
             iter = float(u_currentIter);
             hasDiv = 1.0;
         }
@@ -476,23 +670,33 @@ void main() {
   // ==================== Preview shaders ====================
 
   static buildPreviewPhysicsLoop(system: System): string {
-    return system === 'rigid' ? this.previewRigidPhysicsLoop() : this.previewElasticPhysicsLoop();
+    if (system === 'rigid') return this.previewRigidPhysicsLoop();
+    if (system === 'nonlinear') return this.previewNonlinearPhysicsLoop();
+    return this.previewElasticPhysicsLoop();
   }
 
   static buildPreviewInit(system: System): string {
-    return system === 'rigid' ? this.previewRigidInit() : this.previewElasticInit();
+    if (system === 'rigid') return this.previewRigidInit();
+    if (system === 'nonlinear') return this.previewNonlinearInit();
+    return this.previewElasticInit();
   }
 
   static buildPreviewDivergenceCheck(system: System): string {
-    return system === 'rigid' ? this.previewRigidDivCheck() : this.previewElasticDivCheck();
+    if (system === 'rigid') return this.previewRigidDivCheck();
+    if (system === 'nonlinear') return this.previewNonlinearDivCheck();
+    return this.previewElasticDivCheck();
   }
 
   static buildPreviewTrailAppend(system: System): string {
-    return system === 'rigid' ? this.previewRigidTrailAppend() : this.previewElasticTrailAppend();
+    if (system === 'rigid') return this.previewRigidTrailAppend();
+    if (system === 'nonlinear') return this.previewNonlinearTrailAppend();
+    return this.previewElasticTrailAppend();
   }
 
   static buildPreviewRender(system: System): string {
-    return system === 'rigid' ? this.previewRigidRender() : this.previewElasticRender();
+    if (system === 'rigid') return this.previewRigidRender();
+    if (system === 'nonlinear') return this.previewNonlinearRender();
+    return this.previewElasticRender();
   }
 
   private static previewRigidPhysicsLoop(): string {
@@ -500,6 +704,10 @@ void main() {
 uniform sampler2D u_stateTexture;
 uniform float u_dt;
 uniform int u_steps;
+uniform float u_m1;
+uniform float u_m2;
+uniform float u_L1;
+uniform float u_L2;
 in vec2 v_uv;
 out vec4 fragColor;
 
@@ -531,9 +739,12 @@ uniform sampler2D u_stateTextureA;
 uniform sampler2D u_stateTextureB;
 uniform float u_dt;
 uniform int u_steps;
-uniform int u_elasticMode;
 uniform float u_k1;
 uniform float u_k2;
+uniform float u_m1;
+uniform float u_m2;
+uniform float u_L1;
+uniform float u_L2;
 in vec2 v_uv;
 layout(location = 0) out vec4 outStateA;
 layout(location = 1) out vec4 outStateB;
@@ -547,32 +758,56 @@ void main() {
     for (int i = 0; i < 100; i++) {
         if (i >= u_steps) break;
 
-        vec4 ca, cb;
-        if (u_elasticMode == 0) {
-            ca = sa; cb = vec4(sb.x, sb.y, 0.0, 0.0);
-        } else if (u_elasticMode == 1) {
-            ca = vec4(sa.x, sa.y, 0.0, 0.0); cb = vec4(sa.z, sa.w, sb.x, sb.y);
-        } else {
-            ca = sa; cb = sb;
-        }
+        float dt = u_dt;
+        vec4 da1, db1, da2, db2, da3, db3, da4, db4;
+        systemDeriv(sa, sb, da1, db1);
+        systemDeriv(sa + 0.5*dt*da1, sb + 0.5*dt*db1, da2, db2);
+        systemDeriv(sa + 0.5*dt*da2, sb + 0.5*dt*db2, da3, db3);
+        systemDeriv(sa + dt*da3, sb + dt*db3, da4, db4);
+
+        sa = sa + (dt / 6.0) * (da1 + 2.0*da2 + 2.0*da3 + da4);
+        sb = sb + (dt / 6.0) * (db1 + 2.0*db2 + 2.0*db3 + db4);
+    }
+
+    outStateA = sa;
+    outStateB = sb;
+}`;
+  }
+
+  private static previewNonlinearPhysicsLoop(): string {
+    return `${HEADER}
+uniform sampler2D u_stateTextureA;
+uniform sampler2D u_stateTextureB;
+uniform float u_dt;
+uniform int u_steps;
+uniform float u_k1;
+uniform float u_k2;
+uniform float u_m1;
+uniform float u_m2;
+uniform float u_L1;
+uniform float u_L2;
+in vec2 v_uv;
+layout(location = 0) out vec4 outStateA;
+layout(location = 1) out vec4 outStateB;
+
+${nonlinearFrag}
+
+void main() {
+    vec4 sa = texelFetch(u_stateTextureA, ivec2(0, 0), 0);
+    vec4 sb = texelFetch(u_stateTextureB, ivec2(0, 0), 0);
+
+    for (int i = 0; i < 100; i++) {
+        if (i >= u_steps) break;
 
         float dt = u_dt;
         vec4 da1, db1, da2, db2, da3, db3, da4, db4;
-        systemDeriv(ca, cb, da1, db1);
-        systemDeriv(ca + 0.5*dt*da1, cb + 0.5*dt*db1, da2, db2);
-        systemDeriv(ca + 0.5*dt*da2, cb + 0.5*dt*db2, da3, db3);
-        systemDeriv(ca + dt*da3, cb + dt*db3, da4, db4);
+        systemDeriv(sa, sb, da1, db1);
+        systemDeriv(sa + 0.5*dt*da1, sb + 0.5*dt*db1, da2, db2);
+        systemDeriv(sa + 0.5*dt*da2, sb + 0.5*dt*db2, da3, db3);
+        systemDeriv(sa + dt*da3, sb + dt*db3, da4, db4);
 
-        vec4 newCA = ca + (dt / 6.0) * (da1 + 2.0*da2 + 2.0*da3 + da4);
-        vec4 newCB = cb + (dt / 6.0) * (db1 + 2.0*db2 + 2.0*db3 + db4);
-
-        if (u_elasticMode == 0) {
-            sa = newCA; sb = vec4(newCB.x, newCB.y, 0.0, 1.0);
-        } else if (u_elasticMode == 1) {
-            sa = vec4(newCA.x, newCA.y, newCB.x, newCB.y); sb = vec4(newCB.z, newCB.w, 0.0, 1.0);
-        } else {
-            sa = newCA; sb = newCB;
-        }
+        sa = sa + (dt / 6.0) * (da1 + 2.0*da2 + 2.0*da3 + da4);
+        sb = sb + (dt / 6.0) * (db1 + 2.0*db2 + 2.0*db3 + db4);
     }
 
     outStateA = sa;
@@ -582,29 +817,23 @@ void main() {
 
   private static previewRigidInit(): string {
     return `${HEADER}
-uniform float u_theta1;
-uniform float u_theta2;
-uniform float u_omega1;
-uniform float u_omega2;
+uniform vec4 u_initialState;
 uniform float u_perturb;
 in vec2 v_uv;
 layout(location = 0) out vec4 baseState;
 layout(location = 1) out vec4 pertState;
 
 void main() {
-    baseState = vec4(u_theta1, u_omega1, u_theta2, u_omega2);
-    pertState = vec4(u_theta1 + u_perturb, u_omega1, u_theta2 + u_perturb, u_omega2);
+    baseState = u_initialState;
+    pertState = u_initialState + vec4(u_perturb, 0.0, u_perturb, 0.0);
 }`;
   }
 
   private static previewElasticInit(): string {
     return `${HEADER}
-uniform float u_theta1;
-uniform float u_theta2;
-uniform float u_omega1;
-uniform float u_omega2;
+uniform vec4 u_initialA;
+uniform vec4 u_initialB;
 uniform float u_perturb;
-uniform int u_elasticMode;
 in vec2 v_uv;
 layout(location = 0) out vec4 baseA;
 layout(location = 1) out vec4 baseB;
@@ -612,26 +841,15 @@ layout(location = 2) out vec4 pertA;
 layout(location = 3) out vec4 pertB;
 
 void main() {
-    float pt1 = u_theta1 + u_perturb;
-    float pt2 = u_theta2 + u_perturb;
-
-    if (u_elasticMode == 0) {
-        baseA = vec4(u_theta1, u_omega1, 0.0, 0.0);
-        baseB = vec4(u_theta2, u_omega2, 0.0, 1.0);
-        pertA = vec4(pt1, u_omega1, 0.0, 0.0);
-        pertB = vec4(pt2, u_omega2, 0.0, 1.0);
-    } else if (u_elasticMode == 1) {
-        baseA = vec4(u_theta1, u_omega1, u_theta2, u_omega2);
-        baseB = vec4(0.0, 0.0, 0.0, 1.0);
-        pertA = vec4(pt1, u_omega1, pt2, u_omega2);
-        pertB = vec4(0.0, 0.0, 0.0, 1.0);
-    } else {
-        baseA = vec4(u_theta1, u_omega1, 0.0, 0.0);
-        baseB = vec4(u_theta2, u_omega2, 0.0, 0.0);
-        pertA = vec4(pt1, u_omega1, 0.0, 0.0);
-        pertB = vec4(pt2, u_omega2, 0.0, 0.0);
-    }
+    baseA = u_initialA;
+    baseB = u_initialB;
+    pertA = u_initialA + vec4(u_perturb, 0.0, 0.0, 0.0);
+    pertB = u_initialB + vec4(u_perturb, 0.0, 0.0, 0.0);
 }`;
+  }
+
+  private static previewNonlinearInit(): string {
+    return this.previewElasticInit();
   }
 
   private static previewRigidDivCheck(): string {
@@ -639,7 +857,6 @@ void main() {
 uniform sampler2D u_baseState;
 uniform sampler2D u_pertState;
 uniform sampler2D u_meta;
-uniform float u_threshold;
 in vec2 v_uv;
 out vec4 fragColor;
 
@@ -662,7 +879,7 @@ void main() {
         float d1 = circularDiff(base.x, pert.x);
         float d2 = circularDiff(base.z, pert.z);
         float dist = sqrt(d1*d1 + d2*d2 + (base.y-pert.y)*(base.y-pert.y) + (base.w-pert.w)*(base.w-pert.w));
-        if (dist > u_threshold) {
+        if (dist > 0.05) {
             diverged = 1.0;
         }
     }
@@ -678,8 +895,6 @@ uniform sampler2D u_baseB;
 uniform sampler2D u_pertA;
 uniform sampler2D u_pertB;
 uniform sampler2D u_meta;
-uniform float u_threshold;
-uniform int u_elasticMode;
 in vec2 v_uv;
 out vec4 fragColor;
 
@@ -693,29 +908,13 @@ float circularDiff(float a, float b) {
 float measureDiv(vec4 bA, vec4 bB, vec4 pA, vec4 pB) {
     float d_t1 = circularDiff(bA.x, pA.x);
     float d_o1 = bA.y - pA.y;
-    float dist_sq = d_t1 * d_t1 + d_o1 * d_o1;
-    if (u_elasticMode == 0) {
-        float d_t2 = circularDiff(bB.x, pB.x);
-        float d_o2 = bB.y - pB.y;
-        float d_r1 = bA.z - pA.z;
-        float d_rd1 = bA.w - pA.w;
-        dist_sq += d_t2*d_t2 + d_o2*d_o2 + d_r1*d_r1 + d_rd1*d_rd1;
-    } else if (u_elasticMode == 1) {
-        float d_t2 = circularDiff(bA.z, pA.z);
-        float d_o2 = bA.w - pA.w;
-        float d_r2 = bB.x - pB.x;
-        float d_rd2 = bB.y - pB.y;
-        dist_sq += d_t2*d_t2 + d_o2*d_o2 + d_r2*d_r2 + d_rd2*d_rd2;
-    } else {
-        float d_t2 = circularDiff(bB.x, pB.x);
-        float d_o2 = bB.y - pB.y;
-        float d_r1 = bA.z - pA.z;
-        float d_rd1 = bA.w - pA.w;
-        float d_r2 = bB.z - pB.z;
-        float d_rd2 = bB.w - pB.w;
-        dist_sq += d_t2*d_t2 + d_o2*d_o2 + d_r1*d_r1 + d_rd1*d_rd1 + d_r2*d_r2 + d_rd2*d_rd2;
-    }
-    return sqrt(dist_sq);
+    float d_t2 = circularDiff(bB.x, pB.x);
+    float d_o2 = bB.y - pB.y;
+    float d_r1 = bA.z - pA.z;
+    float d_rd1 = bA.w - pA.w;
+    float d_r2 = bB.z - pB.z;
+    float d_rd2 = bB.w - pB.w;
+    return sqrt(d_t1*d_t1 + d_o1*d_o1 + d_t2*d_t2 + d_o2*d_o2 + d_r1*d_r1 + d_rd1*d_rd1 + d_r2*d_r2 + d_rd2*d_rd2);
 }
 
 void main() {
@@ -730,11 +929,15 @@ void main() {
 
     if (diverged < 0.5) {
         float dist = measureDiv(bA, bB, pA, pB);
-        if (dist > u_threshold) diverged = 1.0;
+        if (dist > 0.05) diverged = 1.0;
     }
 
     fragColor = vec4(diverged, countAtDiv, 0.0, 0.0);
 }`;
+  }
+
+  private static previewNonlinearDivCheck(): string {
+    return this.previewElasticDivCheck();
   }
 
   private static previewRigidTrailAppend(): string {
@@ -757,7 +960,6 @@ void main() {
     return `${HEADER}
 uniform sampler2D u_baseA;
 uniform sampler2D u_baseB;
-uniform int u_elasticMode;
 in vec2 v_uv;
 out vec4 fragColor;
 
@@ -766,14 +968,26 @@ ${bob2Frag}
 void main() {
     vec4 sa = texelFetch(u_baseA, ivec2(0, 0), 0);
     vec4 sb = texelFetch(u_baseB, ivec2(0, 0), 0);
-    float theta1, theta2, r1, r2;
-    if (u_elasticMode == 0) {
-        theta1 = sa.x; theta2 = sb.x; r1 = sa.z; r2 = 0.0;
-    } else if (u_elasticMode == 1) {
-        theta1 = sa.x; theta2 = sa.z; r1 = 0.0; r2 = sb.x;
-    } else {
-        theta1 = sa.x; theta2 = sb.x; r1 = sa.z; r2 = sb.z;
-    }
+    float theta1 = sa.x, theta2 = sb.x, r1 = sa.z, r2 = sb.z;
+    float x2, y2;
+    computeBob2(theta1, theta2, 1.0 + r1, 1.0 + r2, x2, y2);
+    fragColor = vec4(x2, y2, 0.0, 1.0);
+}`;
+  }
+
+  private static previewNonlinearTrailAppend(): string {
+    return `${HEADER}
+uniform sampler2D u_baseA;
+uniform sampler2D u_baseB;
+in vec2 v_uv;
+out vec4 fragColor;
+
+${bob2Frag}
+
+void main() {
+    vec4 sa = texelFetch(u_baseA, ivec2(0, 0), 0);
+    vec4 sb = texelFetch(u_baseB, ivec2(0, 0), 0);
+    float theta1 = sa.x, theta2 = sb.x, r1 = sa.z, r2 = sb.z;
     float x2, y2;
     computeBob2(theta1, theta2, 1.0 + r1, 1.0 + r2, x2, y2);
     fragColor = vec4(x2, y2, 0.0, 1.0);
@@ -917,7 +1131,6 @@ uniform float u_boxSize;
 uniform float u_armScale;
 uniform int u_trailHead;
 uniform int u_trailCount;
-uniform int u_elasticMode;
 in vec2 v_uv;
 out vec4 fragColor;
 
@@ -929,13 +1142,7 @@ ${this.sdfHelpers()}
 ${bob2Frag}
 
 void decodeElastic(vec4 sa, vec4 sb, out float theta1, out float theta2, out float r1, out float r2) {
-    if (u_elasticMode == 0) {
-        theta1 = sa.x; theta2 = sb.x; r1 = sa.z; r2 = 0.0;
-    } else if (u_elasticMode == 1) {
-        theta1 = sa.x; theta2 = sa.z; r1 = 0.0; r2 = sb.x;
-    } else {
-        theta1 = sa.x; theta2 = sb.x; r1 = sa.z; r2 = sb.z;
-    }
+    theta1 = sa.x; theta2 = sb.x; r1 = sa.z; r2 = sb.z;
 }
 
 void main() {
@@ -1012,5 +1219,9 @@ void main() {
 
     fragColor = vec4(color, alpha);
 }`;
+  }
+
+  private static previewNonlinearRender(): string {
+    return this.previewElasticRender();
   }
 }
