@@ -35,9 +35,13 @@ export class Renderer {
   }
 
   render(dataTexture: WebGLTexture): void {
+    this.renderAt(dataTexture, 0, 0, this.config.resolution, this.config.resolution);
+  }
+
+  renderAt(dataTexture: WebGLTexture, x: number, y: number, w: number, h: number): void {
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, this.config.resolution, this.config.resolution);
+    gl.viewport(x, y, w, h);
 
     gl.useProgram(this.program);
     gl.bindVertexArray(this.vao);
@@ -53,29 +57,54 @@ export class Renderer {
   }
 
   computeMaxValue(dataTexture: WebGLTexture): void {
-    const gl = this.gl;
-    const res = this.config.resolution;
     const isDivergence = this.config.vizMode === 'divergence';
-    const sampleSize = isDivergence ? res : Math.min(128, res);
+    const channel = isDivergence ? 0 : 2;
+    let maxVal = 0;
 
+    const gl = this.gl;
     const tempFb = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, tempFb);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, dataTexture, 0);
 
-    const pixels = new Float32Array(sampleSize * sampleSize * 4);
-    gl.viewport(0, 0, sampleSize, sampleSize);
-    gl.readPixels(0, 0, sampleSize, sampleSize, gl.RGBA, gl.FLOAT, pixels);
+    const res = isDivergence ? 128 : 128;
+    const pixels = new Float32Array(res * res * 4);
+    gl.viewport(0, 0, res, res);
+    gl.readPixels(0, 0, res, res, gl.RGBA, gl.FLOAT, pixels);
 
-    let maxVal = 0;
-    const channel = isDivergence ? 0 : 2;
     for (let i = 0; i < pixels.length; i += 4) {
       const val = pixels[i + channel];
       if (val > maxVal && isFinite(val)) maxVal = val;
     }
 
-    this.maxValue = maxVal;
     gl.deleteFramebuffer(tempFb);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.maxValue = maxVal;
+  }
+
+  computeMaxValueFromChunks(chunkTextures: WebGLTexture[]): void {
+    const isDivergence = this.config.vizMode === 'divergence';
+    const channel = isDivergence ? 0 : 2;
+    let maxVal = 0;
+
+    const gl = this.gl;
+    const tempFb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, tempFb);
+    const sampleSize = 128;
+    const pixels = new Float32Array(sampleSize * sampleSize * 4);
+
+    for (const tex of chunkTextures) {
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      gl.viewport(0, 0, sampleSize, sampleSize);
+      gl.readPixels(0, 0, sampleSize, sampleSize, gl.RGBA, gl.FLOAT, pixels);
+      for (let i = 0; i < pixels.length; i += 4) {
+        const val = pixels[i + channel];
+        if (val > maxVal && isFinite(val)) maxVal = val;
+      }
+    }
+
+    gl.deleteFramebuffer(tempFb);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.maxValue = maxVal;
   }
 
   getMaxValue(): number {

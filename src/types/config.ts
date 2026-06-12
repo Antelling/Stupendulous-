@@ -2,7 +2,7 @@ export type SystemType = 'rigid' | 'elastic12' | 'nonlinear';
 export type VizMode = 'distance' | 'divergence';
 export type Colormap = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export type ToneMapping = 0 | 1 | 2 | 3;
-export type Resolution = 256 | 512 | 1024;
+export type Resolution = 256 | 512 | 1024 | 2048 | 4096;
 
 export type PhaseSpaceDimension =
   | 'angle1'
@@ -30,6 +30,7 @@ export interface SimulationConfig {
   system: SystemType;
   vizMode: VizMode;
   resolution: Resolution;
+  chunkSize: ChunkSize;
   phaseSpace: PhaseSpaceConfig;
   dt: number;
   iterationsPerFrame: number;
@@ -94,10 +95,13 @@ export const DIMENSION_DEFAULTS: Record<PhaseSpaceDimension, { min: number; max:
   stretchRate2: { min: -5, max: 5, initial: 0 },
 };
 
+export type ChunkSize = 256 | 512 | 1024 | 2048;
+
 export const DEFAULT_CONFIG: SimulationConfig = {
   system: 'rigid',
   vizMode: 'distance',
   resolution: 512,
+  chunkSize: 512,
   phaseSpace: {
     x: { dimension: 'angle1', min: -Math.PI, max: Math.PI },
     y: { dimension: 'angle2', min: -Math.PI, max: Math.PI },

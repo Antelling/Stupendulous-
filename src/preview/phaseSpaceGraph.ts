@@ -217,7 +217,7 @@ export class PhaseSpaceGraph {
     this.lastKeState = currState;
   }
 
-  draw(showEnergy: boolean): void {
+  draw(showEnergy: boolean, currentFrame?: number, startFrame?: number | null, endFrame?: number | null, divergenceFrame?: number | null): void {
     const ctx = this.ctx;
     const w = this.width;
     const h = this.height;
@@ -229,7 +229,6 @@ export class PhaseSpaceGraph {
     const n = this.data.theta1.length;
     if (n < 2) return;
 
-    // ALL lines on ONE shared scale
     const allArrays: number[][] = [
       this.data.theta1,
       this.data.omega1,
@@ -261,8 +260,8 @@ export class PhaseSpaceGraph {
       allLabels.push(this.labels.elasticEnergy);
     }
 
-    // Single shared scale for ALL lines
-    const globalScale = this.getScaleRange(allArrays);
+    // Per-line scale ranges
+    const perLineScales = allArrays.map(arr => this.getScaleRange([arr]));
 
     // Draw grid lines
     ctx.strokeStyle = 'rgba(100, 100, 100, 0.1)';
@@ -275,8 +274,24 @@ export class PhaseSpaceGraph {
       ctx.stroke();
     }
 
-    // Draw ALL lines on the same scale
-    this.drawLineGroup(allArrays, allColors, globalScale, 0, h, n);
+    // Draw each line on its own scale
+    for (let i = 0; i < allArrays.length; i++) {
+      this.drawSingleLine(allArrays[i], allColors[i], perLineScales[i], 0, h, n);
+    }
+
+    // Draw vertical markers
+    if (startFrame !== undefined && startFrame !== null && startFrame < n) {
+      this.drawVerticalMarker(startFrame, n, w, h, '#0d4', 'Start');
+    }
+    if (endFrame !== undefined && endFrame !== null && endFrame < n) {
+      this.drawVerticalMarker(endFrame, n, w, h, '#e84', 'End');
+    }
+    if (divergenceFrame !== undefined && divergenceFrame !== null && divergenceFrame < n) {
+      this.drawVerticalMarker(divergenceFrame, n, w, h, '#e8a030', 'Divergence');
+    }
+    if (currentFrame !== undefined && currentFrame < n) {
+      this.drawVerticalMarker(currentFrame, n, w, h, 'rgba(255, 255, 255, 0.3)', '', true);
+    }
 
     // Draw legend at the top
     ctx.font = '500 10px monospace';
@@ -301,13 +316,27 @@ export class PhaseSpaceGraph {
       ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
       ctx.fillText(`Poincaré: ${this.poincarePoints.length}`, xPos, yPos);
     }
+  }
 
-    // Draw scale values on the right
-    ctx.textAlign = 'right';
-    ctx.fillStyle = 'rgba(150, 150, 150, 0.6)';
-    ctx.font = '500 8px monospace';
-    ctx.fillText(globalScale.max.toFixed(1), w - 4, 10);
-    ctx.fillText(globalScale.min.toFixed(1), w - 4, h - 2);
+  private drawVerticalMarker(frame: number, totalFrames: number, w: number, h: number, color: string, label: string, isCurrent = false): void {
+    const ctx = this.ctx;
+    const x = (frame / (totalFrames - 1)) * w;
+    
+    ctx.strokeStyle = color;
+    ctx.lineWidth = isCurrent ? 1 : 2;
+    ctx.setLineDash(isCurrent ? [4, 4] : []);
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    
+    if (label && !isCurrent) {
+      ctx.fillStyle = color;
+      ctx.font = '500 9px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(label, x + 4, 20);
+    }
   }
 
   drawPoincare(): void {
@@ -417,9 +446,9 @@ export class PhaseSpaceGraph {
     };
   }
 
-  private drawLineGroup(
-    arrays: number[][],
-    colors: string[],
+  private drawSingleLine(
+    data: number[],
+    color: string,
     scale: ScaleRange,
     top: number,
     height: number,
@@ -430,34 +459,29 @@ export class PhaseSpaceGraph {
     const range = scale.max - scale.min;
     if (range === 0 || !isFinite(range)) return;
 
-    for (let lineIdx = 0; lineIdx < arrays.length; lineIdx++) {
-      const data = arrays[lineIdx];
-      const color = colors[lineIdx];
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
 
-      ctx.beginPath();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5;
+    let hasValidPoint = false;
+    for (let i = 0; i < n; i++) {
+      const val = data[i];
+      if (!isFinite(val)) continue;
+      
+      const x = (i / (n - 1)) * w;
+      const normalized = (val - scale.min) / range;
+      const y = top + height - normalized * height;
 
-      let hasValidPoint = false;
-      for (let i = 0; i < n; i++) {
-        const val = data[i];
-        if (!isFinite(val)) continue;
-        
-        const x = (i / (n - 1)) * w;
-        const normalized = (val - scale.min) / range;
-        const y = top + height - normalized * height;
-
-        if (!hasValidPoint) {
-          ctx.moveTo(x, y);
-          hasValidPoint = true;
-        } else {
-          ctx.lineTo(x, y);
-        }
+      if (!hasValidPoint) {
+        ctx.moveTo(x, y);
+        hasValidPoint = true;
+      } else {
+        ctx.lineTo(x, y);
       }
+    }
 
-      if (hasValidPoint) {
-        ctx.stroke();
-      }
+    if (hasValidPoint) {
+      ctx.stroke();
     }
   }
 

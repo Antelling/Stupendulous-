@@ -10,6 +10,8 @@ import { UIController } from './ui/uiController.ts';
 import { StatsTracker } from './ui/statsTracker.ts';
 import { PendulumPreview } from './preview/pendulumPreview.ts';
 
+type PlayState = 'idle' | 'playing' | 'paused' | 'stale';
+
 export class ChaosApp {
   private gl: WebGL2RenderingContext;
   private config: SimulationConfig;
@@ -26,6 +28,7 @@ export class ChaosApp {
   private isDragging = false;
   private dragStart: { x: number; y: number } | null = null;
   private dragCurrent: { x: number; y: number } | null = null;
+  private playState: PlayState = 'idle';
 
   constructor(canvas: HTMLCanvasElement, config: SimulationConfig) {
     this.canvas = canvas;
@@ -45,10 +48,17 @@ export class ChaosApp {
     this.ui = new UIController();
     this.stats = new StatsTracker();
     this.preview = new PendulumPreview(document.getElementById('canvasWrapper')!, canvas, this.gl, this.config);
+    this.preview.onConfigChange = () => {
+      this.handleSystemChange();
+      this.ui.updateModeUI(this.config);
+      this.ui.updatePendulumParams(this.config);
+      this.ui.updatePhaseSpaceInputs(this.config);
+      this.markStale();
+    };
 
     this.setupControls();
     this.setupZoomControls();
-    this.rebuildSimulator();
+    this.updatePlayButton();
     this.animate();
   }
 
@@ -66,38 +76,94 @@ export class ChaosApp {
     }
   }
 
+  private markStale(): void {
+    if (this.playState === 'playing') {
+      this.playState = 'paused';
+    } else if (this.playState === 'paused') {
+      this.playState = 'stale';
+    }
+    this.updatePlayButton();
+  }
+
+  private togglePlay(): void {
+    if (this.playState === 'idle' || this.playState === 'stale') {
+      this.rebuildSimulator();
+      this.playState = 'playing';
+    } else if (this.playState === 'playing') {
+      this.playState = 'paused';
+    } else if (this.playState === 'paused') {
+      this.playState = 'playing';
+    }
+    this.updatePlayButton();
+  }
+
+  private updatePlayButton(): void {
+    const btn = this.ui.getElement('playBtn') as HTMLButtonElement | null;
+    if (!btn) return;
+    if (this.playState === 'idle') {
+      btn.textContent = '▶ Render';
+    } else if (this.playState === 'playing') {
+      btn.textContent = '⏸ Pause';
+    } else if (this.playState === 'paused') {
+      btn.textContent = '▶ Resume';
+    } else if (this.playState === 'stale') {
+      btn.textContent = '⟳ Rerender';
+    }
+  }
+
   private onDivergenceRender(): void {
-    if (this.simulator) {
+    if (!this.simulator) return;
+    if (this.simulator.isChunkedMode()) {
+      const chunks: WebGLTexture[] = [];
+      const cps = this.simulator.getChunksPerSide();
+      for (let cy = 0; cy < cps; cy++) {
+        for (let cx = 0; cx < cps; cx++) {
+          const t = this.simulator.getChunkResultTexture(cx, cy);
+          if (t) chunks.push(t);
+        }
+      }
+      const cur = this.simulator.getCurrentChunkInfo();
+      if (cur) chunks.push(cur.texture);
+      if (chunks.length > 0) this.renderer.computeMaxValueFromChunks(chunks);
+    } else {
       this.renderer.computeMaxValue(this.simulator.getDataTexture());
     }
   }
 
   private onZoomChange(): void {
     this.ui.updatePhaseSpaceInputs(this.config);
-    this.rebuildSimulator();
+    this.markStale();
   }
 
   private setupControls(): void {
+    this.ui.bindButton('playBtn', () => this.togglePlay());
+
     this.ui.bindControl('systemType', (v) => {
       this.config.system = v as SimulationConfig['system'];
       this.handleSystemChange();
       this.ui.updateModeUI(this.config);
       this.ui.updatePendulumParams(this.config);
       this.ui.updatePhaseSpaceInputs(this.config);
-      this.rebuildSimulator();
+      this.markStale();
     });
 
     this.ui.bindControl('vizMode', (v) => {
       this.config.vizMode = v as SimulationConfig['vizMode'];
       this.ui.updateModeUI(this.config);
-      this.rebuildSimulator();
+      this.markStale();
     });
 
     this.ui.bindControl('resolution', (v) => {
       this.config.resolution = parseInt(v) as SimulationConfig['resolution'];
       this.canvas.width = this.config.resolution;
       this.canvas.height = this.config.resolution;
-      this.rebuildSimulator();
+      this.ui.updateChunkSizeOptions(this.config.resolution);
+      this.markStale();
+    }, 'change');
+
+    this.ui.bindControl('chunkSize', (v) => {
+      this.config.chunkSize = parseInt(v) as SimulationConfig['chunkSize'];
+      this.markStale();
     }, 'change');
 
     this.ui.bindControl('xDimension', (v) => {
@@ -106,7 +172,7 @@ export class ChaosApp {
       this.ui.updatePhaseSpaceInputs(this.config);
       this.ui.ensureDistinctDimensions(this.config.phaseSpace.x.dimension, this.config.phaseSpace.y.dimension);
       this.zoomController = new ZoomController(this.config, () => this.onZoomChange());
-      this.rebuildSimulator();
+      this.markStale();
     }, 'change');
 
     this.ui.bindControl('yDimension', (v) => {
@@ -115,7 +181,7 @@ export class ChaosApp {
       this.ui.updatePhaseSpaceInputs(this.config);
       this.ui.ensureDistinctDimensions(this.config.phaseSpace.x.dimension, this.config.phaseSpace.y.dimension);
       this.zoomController = new ZoomController(this.config, () => this.onZoomChange());
-      this.rebuildSimulator();
+      this.markStale();
     }, 'change');
 
     ['xMin', 'xMax', 'yMin', 'yMax'].forEach(id => {
@@ -126,7 +192,7 @@ export class ChaosApp {
         else if (id === 'yMin') this.config.phaseSpace.y.min = val;
         else if (id === 'yMax') this.config.phaseSpace.y.max = val;
         this.zoomController = new ZoomController(this.config, () => this.onZoomChange());
-        this.rebuildSimulator();
+        this.markStale();
       }, 'change');
     });
 
@@ -144,13 +210,14 @@ export class ChaosApp {
     Object.entries(initialValueMap).forEach(([id, dim]) => {
       this.ui.bindControl(id, (v) => {
         this.config.phaseSpace.initialValues[dim] = parseFloat(v);
-        this.rebuildSimulator();
+        this.markStale();
       }, 'change');
     });
 
     this.ui.bindControl('dt', (v) => {
       this.config.dt = parseFloat(v);
       this.ui.updateIntegrationInputs(this.config);
+      this.markStale();
     }, 'change');
 
     this.ui.bindControl('iterations', (v) => {
@@ -160,13 +227,13 @@ export class ChaosApp {
 
     this.ui.bindControl('maxIter', (v) => {
       this.config.maxIter = parseInt(v);
-      this.rebuildSimulator();
+      this.markStale();
     }, 'change');
 
     this.ui.bindControl('perturb', (v) => {
       this.config.perturb = parseFloat(v);
       this.ui.setTextContent('perturbValue', this.config.perturb.toFixed(6));
-      this.rebuildSimulator();
+      this.markStale();
     });
 
     this.ui.bindControl('colormap', (v) => {
@@ -181,7 +248,7 @@ export class ChaosApp {
     this.ui.bindButton('resetBtn', () => {
       this.zoomController.reset();
       this.ui.updatePhaseSpaceInputs(this.config);
-      this.rebuildSimulator();
+      this.markStale();
     });
 
     this.ui.bindButton('downloadBtn', () => this.download());
@@ -189,37 +256,37 @@ export class ChaosApp {
     this.ui.bindControl('m1', (v) => {
       this.config.m1 = parseFloat(v);
       this.ui.setTextContent('m1Value', this.config.m1.toFixed(1));
-      this.rebuildSimulator();
+      this.markStale();
     });
 
     this.ui.bindControl('m2', (v) => {
       this.config.m2 = parseFloat(v);
       this.ui.setTextContent('m2Value', this.config.m2.toFixed(1));
-      this.rebuildSimulator();
+      this.markStale();
     });
 
     this.ui.bindControl('L1', (v) => {
       this.config.L1 = parseFloat(v);
       this.ui.setTextContent('L1Value', this.config.L1.toFixed(1));
-      this.rebuildSimulator();
+      this.markStale();
     });
 
     this.ui.bindControl('L2', (v) => {
       this.config.L2 = parseFloat(v);
       this.ui.setTextContent('L2Value', this.config.L2.toFixed(1));
-      this.rebuildSimulator();
+      this.markStale();
     });
 
     this.ui.bindControl('k1', (v) => {
       this.config.k1 = parseFloat(v);
       this.ui.setTextContent('k1Value', String(this.config.k1));
-      this.rebuildSimulator();
+      this.markStale();
     });
 
     this.ui.bindControl('k2', (v) => {
       this.config.k2 = parseFloat(v);
       this.ui.setTextContent('k2Value', String(this.config.k2));
-      this.rebuildSimulator();
+      this.markStale();
     });
 
     this.ui.updateModeUI(this.config);
@@ -329,23 +396,65 @@ export class ChaosApp {
     overlay.style.height = (y2 - y1) + 'px';
   }
 
+  private renderCurrentState(): void {
+    if (!this.simulator) return;
+    const isChunked = this.simulator.isChunkedMode();
+
+    if (isChunked) {
+      const gl = this.gl;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, this.config.resolution, this.config.resolution);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      const cps = this.simulator.getChunksPerSide();
+      const cs = this.config.chunkSize;
+
+      for (let cy = 0; cy < cps; cy++) {
+        for (let cx = 0; cx < cps; cx++) {
+          const tex = this.simulator.getChunkResultTexture(cx, cy);
+          if (tex) this.renderer.renderAt(tex, cx * cs, cy * cs, cs, cs);
+        }
+      }
+
+      const cur = this.simulator.getCurrentChunkInfo();
+      if (cur) this.renderer.renderAt(cur.texture, cur.cx * cs, cur.cy * cs, cs, cs);
+    } else {
+      this.renderer.render(this.simulator.getDataTexture());
+    }
+  }
+
   private animate(): void {
     if (this.simulator) {
       const isDiv = this.config.vizMode === 'divergence';
+      const isChunked = this.simulator.isChunkedMode();
 
-      if (!isDiv) {
-        this.simulator.stepDistance();
-        this.renderer.computeMaxValue(this.simulator.getDataTexture());
+      if (this.playState === 'playing' && !this.simulator.isComplete()) {
+        if (!isDiv) {
+          this.simulator.stepDistance();
+        } else {
+          this.simulator.stepDivergence();
+        }
+
+        if (!isChunked && !isDiv) {
+          this.renderer.computeMaxValue(this.simulator.getDataTexture());
+        }
+        if (this.simulator.getFrameCount() % 60 < 2) {
+          this.onDivergenceRender();
+        }
       }
 
-      if (!isDiv || !this.simulator.isComplete()) {
-        this.renderer.render(this.simulator.getDataTexture());
-      }
+      this.renderCurrentState();
 
       const fc = this.simulator.getFrameCount();
-      const isComplete = isDiv && this.simulator.isComplete();
+      const isComplete = this.simulator.isComplete();
       this.stats.update(this.config, fc, this.renderer.getMaxValue(), isComplete);
       this.ui.updateStats(fc, this.renderer.getMaxValue(), this.stats.getFps(), this.zoomController.level);
+
+      if (this.playState === 'playing' && isComplete) {
+        this.playState = 'paused';
+        this.updatePlayButton();
+      }
     }
     requestAnimationFrame(() => this.animate());
   }

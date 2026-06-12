@@ -111,10 +111,34 @@
         button:hover {
             background: #333;
         }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
         hr {
             border: none;
             border-top: 1px solid #333;
             margin: 12px 0;
+        }
+        .console-panel {
+            background: rgba(8, 10, 16, 0.95);
+            border: 1px solid #333;
+            border-radius: 3px;
+            padding: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.75rem;
+        }
+        .console-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+        .console-panel::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+        .console-panel::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 3px;
         }
     </style>
 </head>
@@ -262,7 +286,7 @@
             <label>Iterations per Frame <span id="iterValue">10</span></label>
             <input type="range" id="iterations" min="1" max="50" value="10">
         </div>
-        <div id="maxIterControl" class="control-group" style="display: none;">
+        <div id="maxIterControl" class="control-group">
             <label>Max Iterations</label>
             <input type="number" id="maxIter" min="1" max="100000" value="5000">
         </div>
@@ -287,6 +311,17 @@
                 <option value="256">256 x 256</option>
                 <option value="512" selected>512 x 512</option>
                 <option value="1024">1024 x 1024</option>
+                <option value="2048">2048 x 2048</option>
+                <option value="4096">4096 x 4096</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label for="chunkSize">Chunk Size</label>
+            <select id="chunkSize">
+                <option value="256">256 x 256</option>
+                <option value="512" selected>512 x 512</option>
+                <option value="1024">1024 x 1024</option>
+                <option value="2048">2048 x 2048</option>
             </select>
         </div>
         <div class="control-group">
@@ -315,6 +350,7 @@
     <hr>
 
     <div class="control-group">
+        <button type="button" id="playBtn">▶ Render</button>
         <button type="button" id="zoomOutBtn">Zoom Out</button>
         <button type="button" id="resetBtn">Reset</button>
         <button type="button" id="downloadBtn">Download Image</button>
@@ -343,12 +379,63 @@
     <div id="previewPanel" style="display: inline-block; margin-left: 5px; vertical-align: top; border: 2px solid #444; border-radius: 4px; padding: 8px; background: rgba(8, 10, 16, 0.95); width: 520px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <span style="font-size: 0.85rem; font-weight: 600; color: #aaa;">Trajectory Preview</span>
-            <button type="button" id="previewToggleBtn" title="Click to enable preview mode" style="padding: 2px 8px; font-size: 0.75rem;">▶ Start</button>
+            <div style="display: flex; gap: 4px;">
+                <button type="button" id="optimizeBtn" title="Find periodic orbit from current trajectory" style="padding: 2px 8px; font-size: 0.75rem;" disabled>Find Periodic Orbit</button>
+                <button type="button" id="previewToggleBtn" title="Click to enable preview mode" style="padding: 2px 8px; font-size: 0.75rem;">▶ Start</button>
+            </div>
         </div>
         <canvas id="previewCanvas" width="500" height="500" style="display: block; margin-bottom: 8px; border: 1px solid #333;"></canvas>
+        <div id="playbackControls" style="display: none; margin-bottom: 8px; padding: 6px; background: rgba(20, 20, 30, 0.8); border: 1px solid #333; border-radius: 3px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                <button type="button" id="playPauseBtn" style="padding: 2px 8px; font-size: 0.75rem;">⏸ Pause</button>
+                <input type="range" id="scrubber" min="0" max="1000" value="0" style="flex: 1; width: auto;">
+                <span id="timeDisplay" style="font-size: 0.75rem; color: #888; font-family: monospace; min-width: 60px;">0.00s</span>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <button type="button" id="setStartBtn" style="padding: 2px 8px; font-size: 0.75rem; background: #2a3a2a;">Set Start</button>
+                <button type="button" id="setEndBtn" style="padding: 2px 8px; font-size: 0.75rem; background: #3a2a2a;">Set End</button>
+                <span id="periodSelection" style="font-size: 0.75rem; color: #888; font-family: monospace;">No period selected</span>
+            </div>
+        </div>
         <canvas id="graphCanvas" width="500" height="200" style="display: block; margin-bottom: 8px; border: 1px solid #333;"></canvas>
         <canvas id="poincareCanvas" width="500" height="300" style="display: block; border: 1px solid #333;"></canvas>
         <div id="previewStatus" style="font-size: 0.75rem; color: #666; margin-top: 4px; text-align: center;">Click "Start" then click on the main canvas</div>
+
+        <div id="optimizerControls" style="margin-top: 12px; border-top: 1px solid #333; padding-top: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-size: 0.85rem; font-weight: 600; color: #aaa;">Periodic Orbit Optimizer</span>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <select id="cloudSizeSelect" style="padding: 2px 6px; font-size: 0.75rem;">
+                        <option value="16">16 candidates</option>
+                        <option value="64">64 candidates</option>
+                        <option value="256">256 candidates</option>
+                        <option value="1024">1024 candidates</option>
+                    </select>
+                    <button type="button" id="pauseResumeBtn" style="padding: 2px 8px; font-size: 0.75rem;" disabled>⏸ Pause</button>
+                </div>
+            </div>
+            <div id="optimizerConsole" class="console-panel">
+                <div style="color: #666;">Optimization console - logs will appear here...</div>
+            </div>
+        </div>
+
+        <div id="savedPendulumsSection" style="margin-top: 12px; border-top: 1px solid #333; padding-top: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-size: 0.85rem; font-weight: 600; color: #aaa;">Saved Pendulums</span>
+                <button type="button" id="clearSavedBtn" style="padding: 2px 8px; font-size: 0.7rem;">Clear All</button>
+            </div>
+            <div id="savedPendulumsList" style="max-height: 200px; overflow-y: auto;">
+                <div style="font-size: 0.75rem; color: #666;">No saved pendulums yet</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="seedPreviewPanel" style="margin-top: 12px; border: 2px solid #444; border-radius: 4px; padding: 8px; background: rgba(8, 10, 16, 0.95); width: 520px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-size: 0.85rem; font-weight: 600; color: #aaa;">Optimized Seed Preview</span>
+            <button type="button" id="seedPlayPauseBtn" style="padding: 2px 8px; font-size: 0.75rem;">⏸ Pause</button>
+        </div>
+        <canvas id="seedPreviewCanvas" width="500" height="500" style="display: block; border: 1px solid #333;"></canvas>
     </div>
 
     <p id="hintText" style="font-size: 0.8rem; color: #888; margin-top: 8px;">Drag to zoom in · Right-click or button to zoom out</p>

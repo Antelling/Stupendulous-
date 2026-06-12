@@ -43,10 +43,29 @@ export class ShaderBuilder {
     return this.elasticAccumulate();
   }
 
+  static buildBlit(): string {
+    return `${HEADER}
+uniform sampler2D u_src;
+in vec2 v_uv;
+out vec4 fragColor;
+
+void main() {
+    fragColor = texture(u_src, v_uv);
+}`;
+  }
+
   static buildDivergenceStep(system: System): string {
     if (system === 'rigid') return this.rigidDivergenceStep();
     if (system === 'nonlinear') return this.nonlinearDivergenceStep();
     return this.elasticDivergenceStep();
+  }
+
+  private static chunkCoordHelpers(): string {
+    return `
+vec2 getChunkedUV(vec2 v_uv, vec2 chunkOffset, float chunkScale) {
+    return chunkOffset + v_uv * chunkScale;
+}
+`;
   }
 
   private static mappingHelpers(): string {
@@ -71,14 +90,18 @@ uniform vec2 u_xRange;
 uniform vec2 u_yRange;
 uniform int u_xDim;
 uniform int u_yDim;
+uniform vec2 u_chunkOffset;
+uniform float u_chunkScale;
 in vec2 v_uv;
 layout(location = 0) out vec4 fragColor;
 
+${this.chunkCoordHelpers()}
+
 void main() {
+    vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
     vec4 state = u_initialState;
-    float dx = mix(u_xRange.x, u_xRange.y, v_uv.x);
-    float dy = mix(u_yRange.x, u_yRange.y, v_uv.y);
-    // rigid state layout: (angle1, velocity1, angle2, velocity2)
+    float dx = mix(u_xRange.x, u_xRange.y, uv.x);
+    float dy = mix(u_yRange.x, u_yRange.y, uv.y);
     if (u_xDim == 0) state.x += dx;
     else if (u_xDim == 1) state.y += dx;
     else if (u_xDim == 4) state.z += dx;
@@ -100,18 +123,21 @@ uniform int u_xDim;
 uniform int u_yDim;
 uniform float u_perturb;
 uniform float u_seed;
+uniform vec2 u_chunkOffset;
+uniform float u_chunkScale;
 in vec2 v_uv;
 layout(location = 0) out vec4 baseState;
 layout(location = 1) out vec4 perturbedState;
 layout(location = 2) out vec4 divergenceData;
 
 ${hashFrag}
+${this.chunkCoordHelpers()}
 
 void main() {
+    vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
     vec4 state = u_initialState;
-    float dx = mix(u_xRange.x, u_xRange.y, v_uv.x);
-    float dy = mix(u_yRange.x, u_yRange.y, v_uv.y);
-    // rigid state layout: (angle1, velocity1, angle2, velocity2)
+    float dx = mix(u_xRange.x, u_xRange.y, uv.x);
+    float dy = mix(u_yRange.x, u_yRange.y, uv.y);
     if (u_xDim == 0) state.x += dx;
     else if (u_xDim == 1) state.y += dx;
     else if (u_xDim == 4) state.z += dx;
@@ -121,9 +147,9 @@ void main() {
     else if (u_yDim == 4) state.z += dy;
     else if (u_yDim == 5) state.w += dy;
 
-    float r = hash(v_uv * 1000.0 + u_seed);
+    float r = hash(uv * 1000.0 + u_seed);
     float perturb_theta1 = (r - 0.5) * 2.0 * u_perturb;
-    float perturb_theta2 = (hash(v_uv * 1000.0 + vec2(100.0, u_seed)) - 0.5) * 2.0 * u_perturb;
+    float perturb_theta2 = (hash(uv * 1000.0 + vec2(100.0, u_seed)) - 0.5) * 2.0 * u_perturb;
 
     baseState = state;
     perturbedState = state + vec4(perturb_theta1, 0.0, perturb_theta2, 0.0);
@@ -139,17 +165,21 @@ uniform vec2 u_xRange;
 uniform vec2 u_yRange;
 uniform int u_xDim;
 uniform int u_yDim;
+uniform vec2 u_chunkOffset;
+uniform float u_chunkScale;
 in vec2 v_uv;
 layout(location = 0) out vec4 stateA;
 layout(location = 1) out vec4 stateB;
 
 ${this.mappingHelpers()}
+${this.chunkCoordHelpers()}
 
 void main() {
+    vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
     vec4 a = u_initialA;
     vec4 b = u_initialB;
-    float dx = mix(u_xRange.x, u_xRange.y, v_uv.x);
-    float dy = mix(u_yRange.x, u_yRange.y, v_uv.y);
+    float dx = mix(u_xRange.x, u_xRange.y, uv.x);
+    float dy = mix(u_yRange.x, u_yRange.y, uv.y);
     applyMapping(a, b, u_xDim, dx);
     applyMapping(a, b, u_yDim, dy);
     stateA = a;
@@ -171,6 +201,8 @@ uniform int u_xDim;
 uniform int u_yDim;
 uniform float u_perturb;
 uniform float u_seed;
+uniform vec2 u_chunkOffset;
+uniform float u_chunkScale;
 in vec2 v_uv;
 layout(location = 0) out vec4 baseA;
 layout(location = 1) out vec4 baseB;
@@ -180,18 +212,20 @@ layout(location = 4) out vec4 divergenceData;
 
 ${hashFrag}
 ${this.mappingHelpers()}
+${this.chunkCoordHelpers()}
 
 void main() {
+    vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
     vec4 a = u_initialA;
     vec4 b = u_initialB;
-    float dx = mix(u_xRange.x, u_xRange.y, v_uv.x);
-    float dy = mix(u_yRange.x, u_yRange.y, v_uv.y);
+    float dx = mix(u_xRange.x, u_xRange.y, uv.x);
+    float dy = mix(u_yRange.x, u_yRange.y, uv.y);
     applyMapping(a, b, u_xDim, dx);
     applyMapping(a, b, u_yDim, dy);
 
-    float r = hash(v_uv * 1000.0 + u_seed);
+    float r = hash(uv * 1000.0 + u_seed);
     float perturb_theta1 = (r - 0.5) * 2.0 * u_perturb;
-    float perturb_theta2 = (hash(v_uv * 1000.0 + vec2(100.0, u_seed)) - 0.5) * 2.0 * u_perturb;
+    float perturb_theta2 = (hash(uv * 1000.0 + vec2(100.0, u_seed)) - 0.5) * 2.0 * u_perturb;
 
     baseA = a;
     baseB = b;
@@ -212,6 +246,8 @@ uniform int u_xDim;
 uniform int u_yDim;
 uniform float u_perturb;
 uniform float u_seed;
+uniform vec2 u_chunkOffset;
+uniform float u_chunkScale;
 in vec2 v_uv;
 layout(location = 0) out vec4 baseA;
 layout(location = 1) out vec4 baseB;
@@ -221,18 +257,20 @@ layout(location = 4) out vec4 divergenceData;
 
 ${hashFrag}
 ${this.mappingHelpers()}
+${this.chunkCoordHelpers()}
 
 void main() {
+    vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
     vec4 a = u_initialA;
     vec4 b = u_initialB;
-    float dx = mix(u_xRange.x, u_xRange.y, v_uv.x);
-    float dy = mix(u_yRange.x, u_yRange.y, v_uv.y);
+    float dx = mix(u_xRange.x, u_xRange.y, uv.x);
+    float dy = mix(u_yRange.x, u_yRange.y, uv.y);
     applyMapping(a, b, u_xDim, dx);
     applyMapping(a, b, u_yDim, dy);
 
-    float r = hash(v_uv * 1000.0 + u_seed);
+    float r = hash(uv * 1000.0 + u_seed);
     float perturb_theta1 = (r - 0.5) * 2.0 * u_perturb;
-    float perturb_theta2 = (hash(v_uv * 1000.0 + vec2(100.0, u_seed)) - 0.5) * 2.0 * u_perturb;
+    float perturb_theta2 = (hash(uv * 1000.0 + vec2(100.0, u_seed)) - 0.5) * 2.0 * u_perturb;
 
     baseA = a;
     baseB = b;
@@ -437,6 +475,8 @@ uniform float u_m1;
 uniform float u_m2;
 uniform float u_L1;
 uniform float u_L2;
+uniform vec2 u_chunkOffset;
+uniform float u_chunkScale;
 in vec2 v_uv;
 layout(location = 0) out vec4 baseState;
 layout(location = 1) out vec4 perturbedState;
@@ -445,6 +485,7 @@ layout(location = 2) out vec4 divergenceData;
 const float PI = 3.14159265359;
 
 ${rigidFrag}
+${this.chunkCoordHelpers()}
 
 float circularDiff(float a, float b) {
     float d = a - b;
@@ -470,9 +511,10 @@ void verletStep(inout float t1, inout float o1, inout float t2, inout float o2) 
 }
 
 void main() {
-    vec4 base = texture(u_stateTexture, v_uv);
-    vec4 pert = texture(u_perturbedTexture, v_uv);
-    vec4 div = texture(u_divergenceTexture, v_uv);
+    vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
+    vec4 base = texture(u_stateTexture, uv);
+    vec4 pert = texture(u_perturbedTexture, uv);
+    vec4 div = texture(u_divergenceTexture, uv);
 
     float iter = div.r;
     float hasDiv = div.g;
@@ -512,6 +554,8 @@ uniform float u_m1;
 uniform float u_m2;
 uniform float u_L1;
 uniform float u_L2;
+uniform vec2 u_chunkOffset;
+uniform float u_chunkScale;
 in vec2 v_uv;
 layout(location = 0) out vec4 outBaseA;
 layout(location = 1) out vec4 outBaseB;
@@ -522,6 +566,7 @@ layout(location = 4) out vec4 divergenceData;
 const float PI = 3.14159265359;
 
 ${elasticFrag}
+${this.chunkCoordHelpers()}
 
 float circularDiff(float a, float b) {
     float d = a - b;
@@ -553,11 +598,12 @@ void elasticStep(vec4 sa, vec4 sb, out vec4 newSA, out vec4 newSB) {
 }
 
 void main() {
-    vec4 bA = texture(u_baseTextureA, v_uv);
-    vec4 bB = texture(u_baseTextureB, v_uv);
-    vec4 pA = texture(u_pertTextureA, v_uv);
-    vec4 pB = texture(u_pertTextureB, v_uv);
-    vec4 div = texture(u_divergenceTexture, v_uv);
+    vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
+    vec4 bA = texture(u_baseTextureA, uv);
+    vec4 bB = texture(u_baseTextureB, uv);
+    vec4 pA = texture(u_pertTextureA, uv);
+    vec4 pB = texture(u_pertTextureB, uv);
+    vec4 div = texture(u_divergenceTexture, uv);
 
     float iter = div.r;
     float hasDiv = div.g;
@@ -597,6 +643,8 @@ uniform float u_m1;
 uniform float u_m2;
 uniform float u_L1;
 uniform float u_L2;
+uniform vec2 u_chunkOffset;
+uniform float u_chunkScale;
 in vec2 v_uv;
 layout(location = 0) out vec4 outBaseA;
 layout(location = 1) out vec4 outBaseB;
@@ -607,6 +655,7 @@ layout(location = 4) out vec4 divergenceData;
 const float PI = 3.14159265359;
 
 ${nonlinearFrag}
+${this.chunkCoordHelpers()}
 
 float circularDiff(float a, float b) {
     float d = a - b;
@@ -638,11 +687,12 @@ void elasticStep(vec4 sa, vec4 sb, out vec4 newSA, out vec4 newSB) {
 }
 
 void main() {
-    vec4 bA = texture(u_baseTextureA, v_uv);
-    vec4 bB = texture(u_baseTextureB, v_uv);
-    vec4 pA = texture(u_pertTextureA, v_uv);
-    vec4 pB = texture(u_pertTextureB, v_uv);
-    vec4 div = texture(u_divergenceTexture, v_uv);
+    vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
+    vec4 bA = texture(u_baseTextureA, uv);
+    vec4 bB = texture(u_baseTextureB, uv);
+    vec4 pA = texture(u_pertTextureA, uv);
+    vec4 pB = texture(u_pertTextureB, uv);
+    vec4 div = texture(u_divergenceTexture, uv);
 
     float iter = div.r;
     float hasDiv = div.g;
@@ -1223,5 +1273,218 @@ void main() {
 
   private static previewNonlinearRender(): string {
     return this.previewElasticRender();
+  }
+
+  // ==================== Batch optimizer shaders ====================
+
+  static buildBatchInit(system: System): string {
+    if (system === 'rigid') return this.batchRigidInit();
+    if (system === 'nonlinear') return this.batchNonlinearInit();
+    return this.batchElasticInit();
+  }
+
+  static buildBatchPhysics(system: System): string {
+    if (system === 'rigid') return this.batchRigidPhysics();
+    if (system === 'nonlinear') return this.batchNonlinearPhysics();
+    return this.batchElasticPhysics();
+  }
+
+  private static batchHash(): string {
+    return `
+float batchHash(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}`;
+  }
+
+  private static batchRigidInit(): string {
+    return `${HEADER}
+uniform vec4 u_seedState;
+uniform float u_perturbScale;
+uniform float u_seed;
+in vec2 v_uv;
+out vec4 fragColor;
+
+${this.batchHash()}
+
+void main() {
+    ivec2 coord = ivec2(gl_FragCoord.xy);
+    float idx = float(coord.x + coord.y * 1024);
+
+    float r1 = batchHash(vec2(idx, u_seed));
+    float r2 = batchHash(vec2(idx + 1.0, u_seed));
+    float r3 = batchHash(vec2(idx + 2.0, u_seed));
+    float r4 = batchHash(vec2(idx + 3.0, u_seed));
+
+    vec4 state = u_seedState;
+    state.x += (r1 - 0.5) * 2.0 * u_perturbScale;
+    state.y += (r2 - 0.5) * 2.0 * u_perturbScale;
+    state.z += (r3 - 0.5) * 2.0 * u_perturbScale;
+    state.w += (r4 - 0.5) * 2.0 * u_perturbScale;
+
+    fragColor = state;
+}`;
+  }
+
+  private static batchElasticInit(): string {
+    return `${HEADER}
+uniform vec4 u_seedA;
+uniform vec4 u_seedB;
+uniform float u_perturbScale;
+uniform float u_seed;
+in vec2 v_uv;
+layout(location = 0) out vec4 outA;
+layout(location = 1) out vec4 outB;
+
+${this.batchHash()}
+
+void main() {
+    ivec2 coord = ivec2(gl_FragCoord.xy);
+    float idx = float(coord.x + coord.y * 1024);
+
+    float r1 = batchHash(vec2(idx, u_seed));
+    float r2 = batchHash(vec2(idx + 1.0, u_seed));
+    float r3 = batchHash(vec2(idx + 2.0, u_seed));
+    float r4 = batchHash(vec2(idx + 3.0, u_seed));
+    float r5 = batchHash(vec2(idx + 4.0, u_seed));
+    float r6 = batchHash(vec2(idx + 5.0, u_seed));
+    float r7 = batchHash(vec2(idx + 6.0, u_seed));
+    float r8 = batchHash(vec2(idx + 7.0, u_seed));
+
+    vec4 a = u_seedA;
+    vec4 b = u_seedB;
+    a.x += (r1 - 0.5) * 2.0 * u_perturbScale;
+    a.y += (r2 - 0.5) * 2.0 * u_perturbScale;
+    a.z += (r3 - 0.5) * 2.0 * u_perturbScale;
+    a.w += (r4 - 0.5) * 2.0 * u_perturbScale;
+    b.x += (r5 - 0.5) * 2.0 * u_perturbScale;
+    b.y += (r6 - 0.5) * 2.0 * u_perturbScale;
+    b.z += (r7 - 0.5) * 2.0 * u_perturbScale;
+    b.w += (r8 - 0.5) * 2.0 * u_perturbScale;
+
+    outA = a;
+    outB = b;
+}`;
+  }
+
+  private static batchNonlinearInit(): string {
+    return this.batchElasticInit();
+  }
+
+  private static batchRigidPhysics(): string {
+    return `${HEADER}
+uniform sampler2D u_stateTexture;
+uniform float u_dt;
+uniform int u_steps;
+uniform float u_m1;
+uniform float u_m2;
+uniform float u_L1;
+uniform float u_L2;
+in vec2 v_uv;
+out vec4 fragColor;
+
+${rigidFrag}
+
+void main() {
+    vec4 s = texelFetch(u_stateTexture, ivec2(gl_FragCoord.xy), 0);
+    float theta1 = s.x, omega1 = s.y, theta2 = s.z, omega2 = s.w;
+
+    for (int i = 0; i < 500; i++) {
+        if (i >= u_steps) break;
+        vec2 accel = computeAccelerations(theta1, omega1, theta2, omega2);
+        float oh1 = omega1 + 0.5 * u_dt * accel.x;
+        float oh2 = omega2 + 0.5 * u_dt * accel.y;
+        theta1 += u_dt * oh1;
+        theta2 += u_dt * oh2;
+        vec2 an = computeAccelerations(theta1, oh1, theta2, oh2);
+        omega1 = oh1 + 0.5 * u_dt * an.x;
+        omega2 = oh2 + 0.5 * u_dt * an.y;
+    }
+
+    fragColor = vec4(theta1, omega1, theta2, omega2);
+}`;
+  }
+
+  private static batchElasticPhysics(): string {
+    return `${HEADER}
+uniform sampler2D u_stateTextureA;
+uniform sampler2D u_stateTextureB;
+uniform float u_dt;
+uniform int u_steps;
+uniform float u_k1;
+uniform float u_k2;
+uniform float u_m1;
+uniform float u_m2;
+uniform float u_L1;
+uniform float u_L2;
+in vec2 v_uv;
+layout(location = 0) out vec4 outStateA;
+layout(location = 1) out vec4 outStateB;
+
+${elasticFrag}
+
+void main() {
+    vec4 sa = texelFetch(u_stateTextureA, ivec2(gl_FragCoord.xy), 0);
+    vec4 sb = texelFetch(u_stateTextureB, ivec2(gl_FragCoord.xy), 0);
+
+    for (int i = 0; i < 500; i++) {
+        if (i >= u_steps) break;
+
+        float dt = u_dt;
+        vec4 da1, db1, da2, db2, da3, db3, da4, db4;
+        systemDeriv(sa, sb, da1, db1);
+        systemDeriv(sa + 0.5*dt*da1, sb + 0.5*dt*db1, da2, db2);
+        systemDeriv(sa + 0.5*dt*da2, sb + 0.5*dt*db2, da3, db3);
+        systemDeriv(sa + dt*da3, sb + dt*db3, da4, db4);
+
+        sa = sa + (dt / 6.0) * (da1 + 2.0*da2 + 2.0*da3 + da4);
+        sb = sb + (dt / 6.0) * (db1 + 2.0*db2 + 2.0*db3 + db4);
+    }
+
+    outStateA = sa;
+    outStateB = sb;
+}`;
+  }
+
+  private static batchNonlinearPhysics(): string {
+    return `${HEADER}
+uniform sampler2D u_stateTextureA;
+uniform sampler2D u_stateTextureB;
+uniform float u_dt;
+uniform int u_steps;
+uniform float u_k1;
+uniform float u_k2;
+uniform float u_m1;
+uniform float u_m2;
+uniform float u_L1;
+uniform float u_L2;
+in vec2 v_uv;
+layout(location = 0) out vec4 outStateA;
+layout(location = 1) out vec4 outStateB;
+
+${nonlinearFrag}
+
+void main() {
+    vec4 sa = texelFetch(u_stateTextureA, ivec2(gl_FragCoord.xy), 0);
+    vec4 sb = texelFetch(u_stateTextureB, ivec2(gl_FragCoord.xy), 0);
+
+    for (int i = 0; i < 500; i++) {
+        if (i >= u_steps) break;
+
+        float dt = u_dt;
+        vec4 da1, db1, da2, db2, da3, db3, da4, db4;
+        systemDeriv(sa, sb, da1, db1);
+        systemDeriv(sa + 0.5*dt*da1, sb + 0.5*dt*db1, da2, db2);
+        systemDeriv(sa + 0.5*dt*da2, sb + 0.5*dt*db2, da3, db3);
+        systemDeriv(sa + dt*da3, sb + dt*db3, da4, db4);
+
+        sa = sa + (dt / 6.0) * (da1 + 2.0*da2 + 2.0*da3 + da4);
+        sb = sb + (dt / 6.0) * (db1 + 2.0*db2 + 2.0*db3 + db4);
+    }
+
+    outStateA = sa;
+    outStateB = sb;
+}`;
   }
 }

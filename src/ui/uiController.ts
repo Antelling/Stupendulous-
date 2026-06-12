@@ -15,7 +15,7 @@ export class UIController {
       'initAngle1', 'initVelocity1', 'initAngle2', 'initVelocity2',
       'initStretch1', 'initStretchRate1', 'initStretch2', 'initStretchRate2',
       'dt', 'iterations', 'maxIter', 'perturb',
-      'resetBtn', 'downloadBtn', 'zoomOutBtn',
+      'resetBtn', 'downloadBtn', 'zoomOutBtn', 'playBtn',
       'modeIndicator', 'subtitle', 'legendGradient',
       'frameCount', 'maxDistance', 'fps', 'zoomLevel',
       'iterValue', 'perturbValue',
@@ -62,7 +62,6 @@ export class UIController {
     const isElastic = config.system !== 'rigid';
     const isDivergence = config.vizMode === 'divergence';
 
-    this.setDisplay('maxIterControl', isDivergence ? 'block' : 'none');
     this.setDisplay('perturbControl', isDivergence ? 'block' : 'none');
     this.setDisplay('elasticControls', isElastic ? 'block' : 'none');
 
@@ -177,5 +176,25 @@ export class UIController {
   bindButton(id: string, callback: () => void): void {
     const el = this.getElement(id);
     if (el) el.addEventListener('click', callback);
+  }
+
+  updateChunkSizeOptions(resolution: number): void {
+    const chunkSelect = this.getElement('chunkSize') as HTMLSelectElement | null;
+    if (!chunkSelect) return;
+
+    for (let i = 0; i < chunkSelect.options.length; i++) {
+      const opt = chunkSelect.options[i];
+      const val = parseInt(opt.value);
+      opt.disabled = val > resolution;
+    }
+
+    const currentVal = parseInt(chunkSelect.value);
+    if (currentVal > resolution) {
+      const validOptions = Array.from(chunkSelect.options).filter(o => !o.disabled);
+      if (validOptions.length > 0) {
+        const largest = validOptions[validOptions.length - 1];
+        chunkSelect.value = largest.value;
+      }
+    }
   }
 }
