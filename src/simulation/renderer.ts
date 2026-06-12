@@ -50,7 +50,8 @@ export class Renderer {
     this.uniforms.set1i(this.program, 'u_colormap', this.config.colormap);
     this.uniforms.set1i(this.program, 'u_toneMapping', this.config.toneMapping);
     this.uniforms.set1f(this.program, 'u_maxValue', this.maxValue || 1);
-    this.uniforms.set1b(this.program, 'u_isDivergenceMode', this.config.vizMode === 'divergence');
+    const vizModeInt = this.config.vizMode === 'distance' ? 0 : this.config.vizMode === 'divergence' ? 1 : 2;
+    this.uniforms.set1i(this.program, 'u_vizMode', vizModeInt);
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);

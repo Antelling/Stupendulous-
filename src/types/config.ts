@@ -1,5 +1,5 @@
 export type SystemType = 'rigid' | 'elastic12' | 'nonlinear';
-export type VizMode = 'distance' | 'divergence';
+export type VizMode = 'distance' | 'divergence' | 'divergenceDistance';
 export type Colormap = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export type ToneMapping = 0 | 1 | 2 | 3;
 export type Resolution = 256 | 512 | 1024 | 2048 | 4096;
@@ -140,6 +140,7 @@ export const SYSTEM_NAMES: Record<SystemType, string> = {
 export const MODE_NAMES: Record<VizMode, string> = {
   distance: 'Bob2 Distance',
   divergence: 'Divergence Time',
+  divergenceDistance: 'Divergence Distance',
 };
 
 export const COLORMAP_NAMES: Record<Colormap, string> = {

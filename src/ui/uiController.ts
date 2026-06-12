@@ -61,8 +61,10 @@ export class UIController {
     const isDistance = config.vizMode === 'distance';
     const isElastic = config.system !== 'rigid';
     const isDivergence = config.vizMode === 'divergence';
+    const isDivDist = config.vizMode === 'divergenceDistance';
+    const needsPerturb = isDivergence || isDivDist;
 
-    this.setDisplay('perturbControl', isDivergence ? 'block' : 'none');
+    this.setDisplay('perturbControl', needsPerturb ? 'block' : 'none');
     this.setDisplay('elasticControls', isElastic ? 'block' : 'none');
 
     const elasticOnly = document.querySelectorAll('.elastic-only');
@@ -79,6 +81,7 @@ export class UIController {
     const subtitles: Record<typeof config.vizMode, string> = {
       distance: isElastic ? 'Total distance traveled by bob2 (elastic system)' : 'Total distance traveled by the second pendulum bob',
       divergence: 'Iterations until perturbed trajectory diverges',
+      divergenceDistance: 'Distance traveled by bob2 when trajectories diverge',
     };
     this.setTextContent('subtitle', subtitles[config.vizMode]);
 

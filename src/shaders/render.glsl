@@ -5,7 +5,7 @@ uniform sampler2D u_dataTexture;
 uniform int u_colormap;
 uniform int u_toneMapping;
 uniform float u_maxValue;
-uniform bool u_isDivergenceMode;
+uniform int u_vizMode;
 
 in vec2 v_uv;
 out vec4 fragColor;
@@ -86,12 +86,18 @@ void main() {
     vec4 data = texture(u_dataTexture, v_uv);
     float value;
     
-    if (u_isDivergenceMode) {
+    if (u_vizMode == 1) {
         value = data.r;
         if (value <= 0.0) {
             fragColor = vec4(1.0, 1.0, 1.0, 1.0);
             return;
         }
+    } else if (u_vizMode == 2) {
+        if (data.w < 0.5) {
+            fragColor = vec4(1.0, 1.0, 1.0, 1.0);
+            return;
+        }
+        value = data.z;
     } else {
         value = data.z;
         if (data.w < 0.5) {

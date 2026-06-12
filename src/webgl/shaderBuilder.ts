@@ -7,7 +7,7 @@ import hashFrag from '../shaders/fragments/hash.glsl?raw';
 import type { PhaseSpaceDimension } from '../types/config.ts';
 
 type System = 'rigid' | 'elastic' | 'nonlinear';
-type Mode = 'distance' | 'divergence';
+type Mode = 'distance' | 'divergence' | 'divergenceDistance';
 
 const HEADER = `#version 300 es
 precision highp float;
@@ -26,6 +26,11 @@ const DIM_INDEX: Record<PhaseSpaceDimension, number> = {
 
 export class ShaderBuilder {
   static buildInit(system: System, mode: Mode): string {
+    if (mode === 'divergenceDistance') {
+      if (system === 'rigid') return this.rigidDivDistanceInit();
+      if (system === 'nonlinear') return this.nonlinearDivDistanceInit();
+      return this.elasticDivDistanceInit();
+    }
     if (system === 'rigid') return mode === 'distance' ? this.rigidDistanceInit() : this.rigidDivergenceInit();
     if (system === 'nonlinear') return mode === 'distance' ? this.nonlinearDistanceInit() : this.nonlinearDivergenceInit();
     return mode === 'distance' ? this.elasticDistanceInit() : this.elasticDivergenceInit();
@@ -54,7 +59,12 @@ void main() {
 }`;
   }
 
-  static buildDivergenceStep(system: System): string {
+  static buildDivergenceStep(system: System, mode: Mode = 'divergence'): string {
+    if (mode === 'divergenceDistance') {
+      if (system === 'rigid') return this.rigidDivDistanceStep();
+      if (system === 'nonlinear') return this.nonlinearDivDistanceStep();
+      return this.elasticDivDistanceStep();
+    }
     if (system === 'rigid') return this.rigidDivergenceStep();
     if (system === 'nonlinear') return this.nonlinearDivergenceStep();
     return this.elasticDivergenceStep();
@@ -717,7 +727,382 @@ void main() {
 }`;
   }
 
-  // ==================== Preview shaders ====================
+  // ==================== Divergence Distance shaders ====================
+
+  private static rigidDivDistanceInit(): string {
+    return `${HEADER}
+uniform vec4 u_initialState;
+uniform vec2 u_xRange;
+uniform vec2 u_yRange;
+uniform int u_xDim;
+uniform int u_yDim;
+uniform float u_perturb;
+uniform float u_seed;
+uniform float u_L1;
+uniform float u_L2;
+uniform vec2 u_chunkOffset;
+uniform float u_chunkScale;
+in vec2 v_uv;
+layout(location = 0) out vec4 baseState;
+layout(location = 1) out vec4 perturbedState;
+layout(location = 2) out vec4 divergenceData;
+
+${hashFrag}
+${bob2Frag}
+${this.chunkCoordHelpers()}
+
+void main() {
+    vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
+    vec4 state = u_initialState;
+    float dx = mix(u_xRange.x, u_xRange.y, uv.x);
+    float dy = mix(u_yRange.x, u_yRange.y, uv.y);
+    if (u_xDim == 0) state.x += dx;
+    else if (u_xDim == 1) state.y += dx;
+    else if (u_xDim == 4) state.z += dx;
+    else if (u_xDim == 5) state.w += dx;
+    if (u_yDim == 0) state.x += dy;
+    else if (u_yDim == 1) state.y += dy;
+    else if (u_yDim == 4) state.z += dy;
+    else if (u_yDim == 5) state.w += dy;
+
+    float r = hash(uv * 1000.0 + u_seed);
+    float perturb_theta1 = (r - 0.5) * 2.0 * u_perturb;
+    float perturb_theta2 = (hash(uv * 1000.0 + vec2(100.0, u_seed)) - 0.5) * 2.0 * u_perturb;
+
+    baseState = state;
+    perturbedState = state + vec4(perturb_theta1, 0.0, perturb_theta2, 0.0);
+
+    float bx2, by2;
+    computeBob2(state.x, state.z, u_L1, u_L2, bx2, by2);
+    divergenceData = vec4(bx2, by2, 0.0, 0.0);
+}`;
+  }
+
+  private static elasticDivDistanceInit(): string {
+    return `${HEADER}
+uniform vec4 u_initialA;
+uniform vec4 u_initialB;
+uniform vec2 u_xRange;
+uniform vec2 u_yRange;
+uniform int u_xDim;
+uniform int u_yDim;
+uniform float u_perturb;
+uniform float u_seed;
+uniform float u_L1;
+uniform float u_L2;
+uniform vec2 u_chunkOffset;
+uniform float u_chunkScale;
+in vec2 v_uv;
+layout(location = 0) out vec4 baseA;
+layout(location = 1) out vec4 baseB;
+layout(location = 2) out vec4 pertA;
+layout(location = 3) out vec4 pertB;
+layout(location = 4) out vec4 divergenceData;
+
+${hashFrag}
+${bob2Frag}
+${this.mappingHelpers()}
+${this.chunkCoordHelpers()}
+
+void main() {
+    vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
+    vec4 a = u_initialA;
+    vec4 b = u_initialB;
+    float dx = mix(u_xRange.x, u_xRange.y, uv.x);
+    float dy = mix(u_yRange.x, u_yRange.y, uv.y);
+    applyMapping(a, b, u_xDim, dx);
+    applyMapping(a, b, u_yDim, dy);
+
+    float r = hash(uv * 1000.0 + u_seed);
+    float perturb_theta1 = (r - 0.5) * 2.0 * u_perturb;
+    float perturb_theta2 = (hash(uv * 1000.0 + vec2(100.0, u_seed)) - 0.5) * 2.0 * u_perturb;
+
+    baseA = a;
+    baseB = b;
+    pertA = a + vec4(perturb_theta1, 0.0, 0.0, 0.0);
+    pertB = b + vec4(perturb_theta2, 0.0, 0.0, 0.0);
+
+    float bx2, by2;
+    computeBob2(a.x, b.x, u_L1 + a.z, u_L2 + b.z, bx2, by2);
+    divergenceData = vec4(bx2, by2, 0.0, 0.0);
+}`;
+  }
+
+  private static nonlinearDivDistanceInit(): string {
+    return this.elasticDivDistanceInit();
+  }
+
+  private static rigidDivDistanceStep(): string {
+    return `${HEADER}
+uniform sampler2D u_stateTexture;
+uniform sampler2D u_perturbedTexture;
+uniform sampler2D u_divergenceTexture;
+uniform float u_dt;
+uniform float u_m1;
+uniform float u_m2;
+uniform float u_L1;
+uniform float u_L2;
+uniform vec2 u_chunkOffset;
+uniform float u_chunkScale;
+in vec2 v_uv;
+layout(location = 0) out vec4 baseState;
+layout(location = 1) out vec4 perturbedState;
+layout(location = 2) out vec4 divergenceData;
+
+const float PI = 3.14159265359;
+
+${rigidFrag}
+${bob2Frag}
+${this.chunkCoordHelpers()}
+
+float circularDiff(float a, float b) {
+    float d = a - b;
+    return d - 2.0 * PI * floor(d / (2.0 * PI) + 0.5);
+}
+
+float measureDivergence(float t1a, float o1a, float t2a, float o2a,
+                        float t1b, float o1b, float t2b, float o2b) {
+    float d1 = circularDiff(t1a, t1b);
+    float d2 = circularDiff(t2a, t2b);
+    return sqrt(d1*d1 + d2*d2 + (o1a-o1b)*(o1a-o1b) + (o2a-o2b)*(o2a-o2b));
+}
+
+void verletStep(inout float t1, inout float o1, inout float t2, inout float o2) {
+    vec2 accel = computeAccelerations(t1, o1, t2, o2);
+    float o1h = o1 + 0.5 * u_dt * accel.x;
+    float o2h = o2 + 0.5 * u_dt * accel.y;
+    t1 += u_dt * o1h;
+    t2 += u_dt * o2h;
+    vec2 accelN = computeAccelerations(t1, o1h, t2, o2h);
+    o1 = o1h + 0.5 * u_dt * accelN.x;
+    o2 = o2h + 0.5 * u_dt * accelN.y;
+}
+
+void main() {
+    vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
+    vec4 base = texture(u_stateTexture, uv);
+    vec4 pert = texture(u_perturbedTexture, uv);
+    vec4 div = texture(u_divergenceTexture, uv);
+
+    float prevBx2 = div.x, prevBy2 = div.y;
+    float totalDist = div.z;
+    float hasDiv = div.w;
+
+    float bt1 = base.x, bo1 = base.y, bt2 = base.z, bo2 = base.w;
+    float pt1 = pert.x, po1 = pert.y, pt2 = pert.z, po2 = pert.w;
+
+    verletStep(bt1, bo1, bt2, bo2);
+    verletStep(pt1, po1, pt2, po2);
+
+    baseState = vec4(bt1, bo1, bt2, bo2);
+    perturbedState = vec4(pt1, po1, pt2, po2);
+
+    float bx2, by2;
+    computeBob2(bt1, bt2, u_L1, u_L2, bx2, by2);
+
+    if (hasDiv < 0.5) {
+        float delta = sqrt((bx2 - prevBx2) * (bx2 - prevBx2) + (by2 - prevBy2) * (by2 - prevBy2));
+        totalDist += delta;
+
+        float divDist = measureDivergence(bt1, bo1, bt2, bo2, pt1, po1, pt2, po2);
+        if (divDist > 0.05) {
+            hasDiv = 1.0;
+        }
+    }
+
+    divergenceData = vec4(bx2, by2, totalDist, hasDiv);
+}`;
+  }
+
+  private static elasticDivDistanceStep(): string {
+    return `${HEADER}
+uniform sampler2D u_baseTextureA;
+uniform sampler2D u_baseTextureB;
+uniform sampler2D u_pertTextureA;
+uniform sampler2D u_pertTextureB;
+uniform sampler2D u_divergenceTexture;
+uniform float u_dt;
+uniform float u_k1;
+uniform float u_k2;
+uniform float u_m1;
+uniform float u_m2;
+uniform float u_L1;
+uniform float u_L2;
+uniform vec2 u_chunkOffset;
+uniform float u_chunkScale;
+in vec2 v_uv;
+layout(location = 0) out vec4 outBaseA;
+layout(location = 1) out vec4 outBaseB;
+layout(location = 2) out vec4 outPertA;
+layout(location = 3) out vec4 outPertB;
+layout(location = 4) out vec4 divergenceData;
+
+const float PI = 3.14159265359;
+
+${elasticFrag}
+${bob2Frag}
+${this.chunkCoordHelpers()}
+
+float circularDiff(float a, float b) {
+    float d = a - b;
+    return d - 2.0 * PI * floor(d / (2.0 * PI) + 0.5);
+}
+
+float measureElasticDivergence(vec4 bA, vec4 bB, vec4 pA, vec4 pB) {
+    float d_t1 = circularDiff(bA.x, pA.x);
+    float d_o1 = bA.y - pA.y;
+    float d_t2 = circularDiff(bB.x, pB.x);
+    float d_o2 = bB.y - pB.y;
+    float d_r1 = bA.z - pA.z;
+    float d_rd1 = bA.w - pA.w;
+    float d_r2 = bB.z - pB.z;
+    float d_rd2 = bB.w - pB.w;
+    return sqrt(d_t1*d_t1 + d_o1*d_o1 + d_t2*d_t2 + d_o2*d_o2 + d_r1*d_r1 + d_rd1*d_rd1 + d_r2*d_r2 + d_rd2*d_rd2);
+}
+
+void elasticStep(vec4 sa, vec4 sb, out vec4 newSA, out vec4 newSB) {
+    float dt = u_dt;
+    vec4 da1, db1, da2, db2, da3, db3, da4, db4;
+    systemDeriv(sa, sb, da1, db1);
+    systemDeriv(sa + 0.5*dt*da1, sb + 0.5*dt*db1, da2, db2);
+    systemDeriv(sa + 0.5*dt*da2, sb + 0.5*dt*db2, da3, db3);
+    systemDeriv(sa + dt*da3, sb + dt*db3, da4, db4);
+    newSA = sa + (dt / 6.0) * (da1 + 2.0*da2 + 2.0*da3 + da4);
+    newSB = sb + (dt / 6.0) * (db1 + 2.0*db2 + 2.0*db3 + db4);
+}
+
+void main() {
+    vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
+    vec4 bA = texture(u_baseTextureA, uv);
+    vec4 bB = texture(u_baseTextureB, uv);
+    vec4 pA = texture(u_pertTextureA, uv);
+    vec4 pB = texture(u_pertTextureB, uv);
+    vec4 div = texture(u_divergenceTexture, uv);
+
+    float prevBx2 = div.x, prevBy2 = div.y;
+    float totalDist = div.z;
+    float hasDiv = div.w;
+
+    vec4 newBA, newBB, newPA, newPB;
+    elasticStep(bA, bB, newBA, newBB);
+    elasticStep(pA, pB, newPA, newPB);
+
+    outBaseA = newBA;
+    outBaseB = newBB;
+    outPertA = newPA;
+    outPertB = newPB;
+
+    float bx2, by2;
+    computeBob2(newBA.x, newBB.x, u_L1 + newBA.z, u_L2 + newBB.z, bx2, by2);
+
+    if (hasDiv < 0.5) {
+        float delta = sqrt((bx2 - prevBx2) * (bx2 - prevBx2) + (by2 - prevBy2) * (by2 - prevBy2));
+        totalDist += delta;
+
+        float dist = measureElasticDivergence(newBA, newBB, newPA, newPB);
+        if (dist > 0.05) {
+            hasDiv = 1.0;
+        }
+    }
+
+    divergenceData = vec4(bx2, by2, totalDist, hasDiv);
+}`;
+  }
+
+  private static nonlinearDivDistanceStep(): string {
+    return `${HEADER}
+uniform sampler2D u_baseTextureA;
+uniform sampler2D u_baseTextureB;
+uniform sampler2D u_pertTextureA;
+uniform sampler2D u_pertTextureB;
+uniform sampler2D u_divergenceTexture;
+uniform float u_dt;
+uniform float u_k1;
+uniform float u_k2;
+uniform float u_m1;
+uniform float u_m2;
+uniform float u_L1;
+uniform float u_L2;
+uniform vec2 u_chunkOffset;
+uniform float u_chunkScale;
+in vec2 v_uv;
+layout(location = 0) out vec4 outBaseA;
+layout(location = 1) out vec4 outBaseB;
+layout(location = 2) out vec4 outPertA;
+layout(location = 3) out vec4 outPertB;
+layout(location = 4) out vec4 divergenceData;
+
+const float PI = 3.14159265359;
+
+${nonlinearFrag}
+${bob2Frag}
+${this.chunkCoordHelpers()}
+
+float circularDiff(float a, float b) {
+    float d = a - b;
+    return d - 2.0 * PI * floor(d / (2.0 * PI) + 0.5);
+}
+
+float measureElasticDivergence(vec4 bA, vec4 bB, vec4 pA, vec4 pB) {
+    float d_t1 = circularDiff(bA.x, pA.x);
+    float d_o1 = bA.y - pA.y;
+    float d_t2 = circularDiff(bB.x, pB.x);
+    float d_o2 = bB.y - pB.y;
+    float d_r1 = bA.z - pA.z;
+    float d_rd1 = bA.w - pA.w;
+    float d_r2 = bB.z - pB.z;
+    float d_rd2 = bB.w - pB.w;
+    return sqrt(d_t1*d_t1 + d_o1*d_o1 + d_t2*d_t2 + d_o2*d_o2 + d_r1*d_r1 + d_rd1*d_rd1 + d_r2*d_r2 + d_rd2*d_rd2);
+}
+
+void elasticStep(vec4 sa, vec4 sb, out vec4 newSA, out vec4 newSB) {
+    float dt = u_dt;
+    vec4 da1, db1, da2, db2, da3, db3, da4, db4;
+    systemDeriv(sa, sb, da1, db1);
+    systemDeriv(sa + 0.5*dt*da1, sb + 0.5*dt*db1, da2, db2);
+    systemDeriv(sa + 0.5*dt*da2, sb + 0.5*dt*db2, da3, db3);
+    systemDeriv(sa + dt*da3, sb + dt*db3, da4, db4);
+    newSA = sa + (dt / 6.0) * (da1 + 2.0*da2 + 2.0*da3 + da4);
+    newSB = sb + (dt / 6.0) * (db1 + 2.0*db2 + 2.0*db3 + db4);
+}
+
+void main() {
+    vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
+    vec4 bA = texture(u_baseTextureA, uv);
+    vec4 bB = texture(u_baseTextureB, uv);
+    vec4 pA = texture(u_pertTextureA, uv);
+    vec4 pB = texture(u_pertTextureB, uv);
+    vec4 div = texture(u_divergenceTexture, uv);
+
+    float prevBx2 = div.x, prevBy2 = div.y;
+    float totalDist = div.z;
+    float hasDiv = div.w;
+
+    vec4 newBA, newBB, newPA, newPB;
+    elasticStep(bA, bB, newBA, newBB);
+    elasticStep(pA, pB, newPA, newPB);
+
+    outBaseA = newBA;
+    outBaseB = newBB;
+    outPertA = newPA;
+    outPertB = newPB;
+
+    float bx2, by2;
+    computeBob2(newBA.x, newBB.x, u_L1 + newBA.z, u_L2 + newBB.z, bx2, by2);
+
+    if (hasDiv < 0.5) {
+        float delta = sqrt((bx2 - prevBx2) * (bx2 - prevBx2) + (by2 - prevBy2) * (by2 - prevBy2));
+        totalDist += delta;
+
+        float dist = measureElasticDivergence(newBA, newBB, newPA, newPB);
+        if (dist > 0.05) {
+            hasDiv = 1.0;
+        }
+    }
+
+    divergenceData = vec4(bx2, by2, totalDist, hasDiv);
+}`;
+  }
 
   static buildPreviewPhysicsLoop(system: System): string {
     if (system === 'rigid') return this.previewRigidPhysicsLoop();

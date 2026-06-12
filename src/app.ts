@@ -69,7 +69,7 @@ export class ChaosApp {
     this.simulator = new Simulator(this.gl, this.config, this.quadBuffer.buffer);
     this.preview.rebuildForConfig(this.config);
 
-    if (this.config.vizMode === 'divergence') {
+    if (this.config.vizMode === 'divergence' || this.config.vizMode === 'divergenceDistance') {
       this.simulator.startDivergence(() => this.onDivergenceRender());
     } else {
       this.simulator.reset();
@@ -426,7 +426,7 @@ export class ChaosApp {
 
   private animate(): void {
     if (this.simulator) {
-      const isDiv = this.config.vizMode === 'divergence';
+      const isDiv = this.config.vizMode === 'divergence' || this.config.vizMode === 'divergenceDistance';
       const isChunked = this.simulator.isChunkedMode();
 
       if (this.playState === 'playing' && !this.simulator.isComplete()) {

@@ -8,7 +8,7 @@ import { ShaderBuilder } from '../webgl/shaderBuilder.ts';
 import vertexSource from '../shaders/vertex.glsl?raw';
 
 type SystemKey = 'rigid' | 'elastic' | 'nonlinear';
-type ModeKey = 'distance' | 'divergence';
+type ModeKey = 'distance' | 'divergence' | 'divergenceDistance';
 
 interface CompiledProgram {
   program: WebGLProgram;
@@ -81,7 +81,7 @@ export class Simulator {
 
       this.chunkStateAPair = this.textures.createTexturePair(chunkSize);
       if (this.isElastic) this.chunkStateBPair = this.textures.createTexturePair(chunkSize);
-      if (this.modeKey === 'divergence') {
+      if (this.modeKey !== 'distance') {
         this.chunkPerturbedAPair = this.textures.createTexturePair(chunkSize);
         if (this.isElastic) this.chunkPerturbedBPair = this.textures.createTexturePair(chunkSize);
       }
@@ -94,7 +94,7 @@ export class Simulator {
     } else {
       this.stateAPair = this.textures.createTexturePair(res);
       if (this.isElastic) this.stateBPair = this.textures.createTexturePair(res);
-      if (this.modeKey === 'divergence') {
+      if (this.modeKey !== 'distance') {
         this.perturbedAPair = this.textures.createTexturePair(res);
         if (this.isElastic) this.perturbedBPair = this.textures.createTexturePair(res);
       }
@@ -112,7 +112,7 @@ export class Simulator {
       this.compileAndStore(compiler, 'physics', ShaderBuilder.buildPhysics(this.systemKey));
       this.compileAndStore(compiler, 'accumulate', ShaderBuilder.buildAccumulate(this.systemKey));
     } else {
-      this.compileAndStore(compiler, 'divergeStep', ShaderBuilder.buildDivergenceStep(this.systemKey));
+      this.compileAndStore(compiler, 'divergeStep', ShaderBuilder.buildDivergenceStep(this.systemKey, this.modeKey));
     }
     if (this.chunking) {
       this.compileAndStore(compiler, 'blit', ShaderBuilder.buildBlit());
@@ -448,6 +448,9 @@ export class Simulator {
     gl.useProgram(prog.program);
     gl.bindVertexArray(prog.vao);
     this.setPhaseSpaceUniforms(prog.program);
+    if (this.modeKey === 'divergenceDistance') {
+      this.setPhysicsUniforms(prog.program);
+    }
     this.uniforms.set1f(prog.program, 'u_perturb', this.config.perturb);
     this.uniforms.set1f(prog.program, 'u_seed', this.config.seed);
     this.uniforms.set2f(prog.program, 'u_chunkOffset', 0, 0);
@@ -480,6 +483,9 @@ export class Simulator {
     gl.useProgram(prog.program);
     gl.bindVertexArray(prog.vao);
     this.setPhaseSpaceUniforms(prog.program);
+    if (this.modeKey === 'divergenceDistance') {
+      this.setPhysicsUniforms(prog.program);
+    }
     this.uniforms.set1f(prog.program, 'u_perturb', this.config.perturb);
     this.uniforms.set1f(prog.program, 'u_seed', this.config.seed);
     this.uniforms.set2f(prog.program, 'u_chunkOffset', cx / this.chunksPerSide, cy / this.chunksPerSide);
