@@ -2,6 +2,8 @@
 
 A WebGL2-based chaos visualization for double pendulum systems with real-time trajectory preview, phase space analysis, and Poincaré section visualization.
 
+![Chaos nonlinear divergence distance map](assets/chaos-nonlinear-divergenceDistance-frame0.png)
+
 ## Features
 
 - **Chaos Map Visualization**: GPU-accelerated rendering of double pendulum divergence/distance maps
