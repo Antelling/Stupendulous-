@@ -36,6 +36,8 @@ npm run build
 
 Built files are in `dist/` and deployed to GitHub Pages.
 
+**Live demo:** https://antelling.github.io/Stupendulous-/
+
 ## License
 
 MIT
