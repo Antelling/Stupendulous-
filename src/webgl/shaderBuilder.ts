@@ -59,6 +59,21 @@ void main() {
 }`;
   }
 
+  static buildBlend(): string {
+    return `${HEADER}
+uniform sampler2D u_accum;
+uniform sampler2D u_newTrial;
+uniform float u_weight;
+in vec2 v_uv;
+out vec4 fragColor;
+
+void main() {
+    vec4 a = texture(u_accum, v_uv);
+    vec4 n = texture(u_newTrial, v_uv);
+    fragColor = mix(a, n, u_weight);
+}`;
+  }
+
   static buildDivergenceStep(system: System, mode: Mode = 'divergence'): string {
     if (mode === 'divergenceDistance') {
       if (system === 'rigid') return this.rigidDivDistanceStep();
@@ -74,6 +89,20 @@ void main() {
     return `
 vec2 getChunkedUV(vec2 v_uv, vec2 chunkOffset, float chunkScale) {
     return chunkOffset + v_uv * chunkScale;
+}
+`;
+  }
+
+  private static perturbHelpers(): string {
+    return `
+uniform int u_perturbMode;
+float samplePerturb(vec2 hi) {
+    if (u_perturbMode == 0) {
+        return (hash(hi) - 0.5) * 2.0 * u_perturb;
+    }
+    float u1 = max(hash(hi), 1e-10);
+    float u2 = hash(hi + vec2(1000.0, -999.0));
+    return sqrt(-2.0 * log(u1)) * cos(6.28318530718 * u2) * u_perturb;
 }
 `;
   }
@@ -141,6 +170,7 @@ layout(location = 1) out vec4 perturbedState;
 layout(location = 2) out vec4 divergenceData;
 
 ${hashFrag}
+${this.perturbHelpers()}
 ${this.chunkCoordHelpers()}
 
 void main() {
@@ -157,9 +187,8 @@ void main() {
     else if (u_yDim == 4) state.z += dy;
     else if (u_yDim == 5) state.w += dy;
 
-    float r = hash(uv * 1000.0 + u_seed);
-    float perturb_theta1 = (r - 0.5) * 2.0 * u_perturb;
-    float perturb_theta2 = (hash(uv * 1000.0 + vec2(100.0, u_seed)) - 0.5) * 2.0 * u_perturb;
+    float perturb_theta1 = samplePerturb(uv * 1000.0 + u_seed);
+    float perturb_theta2 = samplePerturb(uv * 1000.0 + vec2(100.0, u_seed));
 
     baseState = state;
     perturbedState = state + vec4(perturb_theta1, 0.0, perturb_theta2, 0.0);
@@ -221,6 +250,7 @@ layout(location = 3) out vec4 pertB;
 layout(location = 4) out vec4 divergenceData;
 
 ${hashFrag}
+${this.perturbHelpers()}
 ${this.mappingHelpers()}
 ${this.chunkCoordHelpers()}
 
@@ -233,9 +263,8 @@ void main() {
     applyMapping(a, b, u_xDim, dx);
     applyMapping(a, b, u_yDim, dy);
 
-    float r = hash(uv * 1000.0 + u_seed);
-    float perturb_theta1 = (r - 0.5) * 2.0 * u_perturb;
-    float perturb_theta2 = (hash(uv * 1000.0 + vec2(100.0, u_seed)) - 0.5) * 2.0 * u_perturb;
+    float perturb_theta1 = samplePerturb(uv * 1000.0 + u_seed);
+    float perturb_theta2 = samplePerturb(uv * 1000.0 + vec2(100.0, u_seed));
 
     baseA = a;
     baseB = b;
@@ -266,6 +295,7 @@ layout(location = 3) out vec4 pertB;
 layout(location = 4) out vec4 divergenceData;
 
 ${hashFrag}
+${this.perturbHelpers()}
 ${this.mappingHelpers()}
 ${this.chunkCoordHelpers()}
 
@@ -278,9 +308,8 @@ void main() {
     applyMapping(a, b, u_xDim, dx);
     applyMapping(a, b, u_yDim, dy);
 
-    float r = hash(uv * 1000.0 + u_seed);
-    float perturb_theta1 = (r - 0.5) * 2.0 * u_perturb;
-    float perturb_theta2 = (hash(uv * 1000.0 + vec2(100.0, u_seed)) - 0.5) * 2.0 * u_perturb;
+    float perturb_theta1 = samplePerturb(uv * 1000.0 + u_seed);
+    float perturb_theta2 = samplePerturb(uv * 1000.0 + vec2(100.0, u_seed));
 
     baseA = a;
     baseB = b;
@@ -748,6 +777,7 @@ layout(location = 1) out vec4 perturbedState;
 layout(location = 2) out vec4 divergenceData;
 
 ${hashFrag}
+${this.perturbHelpers()}
 ${bob2Frag}
 ${this.chunkCoordHelpers()}
 
@@ -765,9 +795,8 @@ void main() {
     else if (u_yDim == 4) state.z += dy;
     else if (u_yDim == 5) state.w += dy;
 
-    float r = hash(uv * 1000.0 + u_seed);
-    float perturb_theta1 = (r - 0.5) * 2.0 * u_perturb;
-    float perturb_theta2 = (hash(uv * 1000.0 + vec2(100.0, u_seed)) - 0.5) * 2.0 * u_perturb;
+    float perturb_theta1 = samplePerturb(uv * 1000.0 + u_seed);
+    float perturb_theta2 = samplePerturb(uv * 1000.0 + vec2(100.0, u_seed));
 
     baseState = state;
     perturbedState = state + vec4(perturb_theta1, 0.0, perturb_theta2, 0.0);
@@ -800,6 +829,7 @@ layout(location = 3) out vec4 pertB;
 layout(location = 4) out vec4 divergenceData;
 
 ${hashFrag}
+${this.perturbHelpers()}
 ${bob2Frag}
 ${this.mappingHelpers()}
 ${this.chunkCoordHelpers()}
@@ -813,9 +843,8 @@ void main() {
     applyMapping(a, b, u_xDim, dx);
     applyMapping(a, b, u_yDim, dy);
 
-    float r = hash(uv * 1000.0 + u_seed);
-    float perturb_theta1 = (r - 0.5) * 2.0 * u_perturb;
-    float perturb_theta2 = (hash(uv * 1000.0 + vec2(100.0, u_seed)) - 0.5) * 2.0 * u_perturb;
+    float perturb_theta1 = samplePerturb(uv * 1000.0 + u_seed);
+    float perturb_theta2 = samplePerturb(uv * 1000.0 + vec2(100.0, u_seed));
 
     baseA = a;
     baseB = b;

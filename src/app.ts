@@ -236,6 +236,17 @@ export class ChaosApp {
       this.markStale();
     });
 
+    this.ui.bindControl('perturbDistribution', (v) => {
+      this.config.perturbDistribution = v as SimulationConfig['perturbDistribution'];
+      this.markStale();
+    }, 'change');
+
+    this.ui.bindControl('trials', (v) => {
+      this.config.trials = Math.max(1, parseInt(v) || 1);
+      this.ui.setTextContent('trialsValue', String(this.config.trials));
+      this.markStale();
+    });
+
     this.ui.bindControl('colormap', (v) => {
       this.config.colormap = parseInt(v) as SimulationConfig['colormap'];
       this.ui.updateLegend(this.config.colormap);
@@ -450,6 +461,14 @@ export class ChaosApp {
       const isComplete = this.simulator.isComplete();
       this.stats.update(this.config, fc, this.renderer.getMaxValue(), isComplete);
       this.ui.updateStats(fc, this.renderer.getMaxValue(), this.stats.getFps(), this.zoomController.level);
+
+      const isDivAlready = this.config.vizMode === 'divergence' || this.config.vizMode === 'divergenceDistance';
+      if (isDivAlready) {
+        const tp = this.simulator.getTrialProgress();
+        this.ui.updateTrialStats(tp.total > 1, tp.current, tp.total);
+      } else {
+        this.ui.updateTrialStats(false, 1, 1);
+      }
 
       if (this.playState === 'playing' && isComplete) {
         this.playState = 'paused';

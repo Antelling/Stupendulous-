@@ -22,7 +22,8 @@ export class UIController {
       'm1Value', 'm2Value', 'L1Value', 'L2Value',
       'k1Value', 'k2Value',
       'elasticControls', 'maxIterControl', 'perturbControl',
-      'frameRow', 'maxDistRow',
+      'perturbModeControl', 'trialsControl',
+      'frameRow', 'maxDistRow', 'trialRow', 'trialCount',
     ];
 
     for (const id of ids) {
@@ -65,6 +66,8 @@ export class UIController {
     const needsPerturb = isDivergence || isDivDist;
 
     this.setDisplay('perturbControl', needsPerturb ? 'block' : 'none');
+    this.setDisplay('perturbModeControl', needsPerturb ? 'block' : 'none');
+    this.setDisplay('trialsControl', needsPerturb ? 'block' : 'none');
     this.setDisplay('elasticControls', isElastic ? 'block' : 'none');
 
     const elasticOnly = document.querySelectorAll('.elastic-only');
@@ -141,6 +144,14 @@ export class UIController {
     this.setInputValue('maxIter', config.maxIter);
     this.setInputValue('perturb', config.perturb);
     this.setTextContent('perturbValue', config.perturb.toFixed(6));
+    this.setInputValue('perturbDistribution', config.perturbDistribution);
+    this.setInputValue('trials', config.trials);
+    this.setTextContent('trialsValue', String(config.trials));
+  }
+
+  updateTrialStats(visible: boolean, current: number, total: number): void {
+    this.setDisplay('trialRow', visible ? 'inline' : 'none');
+    if (visible) this.setTextContent('trialCount', `${current}/${total}`);
   }
 
   updateStats(frameCount: number, maxValue: number, fps: number, zoomLevel: number): void {

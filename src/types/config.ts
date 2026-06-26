@@ -1,5 +1,6 @@
 export type SystemType = 'rigid' | 'elastic12' | 'nonlinear';
 export type VizMode = 'distance' | 'divergence' | 'divergenceDistance';
+export type PerturbDistribution = 'uniform' | 'gaussian';
 export type Colormap = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export type ToneMapping = 0 | 1 | 2 | 3;
 export type Resolution = 256 | 512 | 1024 | 2048 | 4096;
@@ -36,6 +37,8 @@ export interface SimulationConfig {
   iterationsPerFrame: number;
   maxIter: number;
   perturb: number;
+  perturbDistribution: PerturbDistribution;
+  trials: number;
   m1: number;
   m2: number;
   L1: number;
@@ -120,6 +123,8 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   iterationsPerFrame: 10,
   maxIter: 5000,
   perturb: 0.00001,
+  perturbDistribution: 'uniform',
+  trials: 1,
   m1: 1,
   m2: 1,
   L1: 1,

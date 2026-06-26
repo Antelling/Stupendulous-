@@ -60,6 +60,14 @@ export class Simulator {
   private chunkDone: boolean[] = [];
   private animatingFirstChunk = false;
 
+  private readonly trials: number;
+  private readonly multiTrial: boolean;
+  private currentTrial = 0;
+  private trialsCompleted = 0;
+  private accumPair: [WebGLTexture, WebGLTexture] | null = null;
+  private chunkAccumPair: [WebGLTexture, WebGLTexture] | null = null;
+  private accumReadIndex: 0 | 1 = 0;
+
   constructor(gl: WebGL2RenderingContext, config: SimulationConfig, private quadBuffer: WebGLBuffer) {
     this.gl = gl;
     this.config = config;
@@ -70,6 +78,10 @@ export class Simulator {
     this.systemKey = config.system === 'elastic12' ? 'elastic' : config.system;
     this.modeKey = config.vizMode;
     this.isElastic = this.systemKey === 'elastic' || this.systemKey === 'nonlinear';
+
+    const isDivMode = this.modeKey === 'divergence' || this.modeKey === 'divergenceDistance';
+    this.trials = isDivMode ? Math.max(1, Math.floor(config.trials ?? 1)) : 1;
+    this.multiTrial = isDivMode && this.trials > 1;
 
     const res = config.resolution;
     const chunkSize = config.chunkSize;
@@ -84,6 +96,7 @@ export class Simulator {
       if (this.modeKey !== 'distance') {
         this.chunkPerturbedAPair = this.textures.createTexturePair(chunkSize);
         if (this.isElastic) this.chunkPerturbedBPair = this.textures.createTexturePair(chunkSize);
+        if (this.multiTrial) this.chunkAccumPair = this.textures.createTexturePair(chunkSize);
       }
       this.chunkDataPair = this.textures.createTexturePair(chunkSize);
 
@@ -97,6 +110,7 @@ export class Simulator {
       if (this.modeKey !== 'distance') {
         this.perturbedAPair = this.textures.createTexturePair(res);
         if (this.isElastic) this.perturbedBPair = this.textures.createTexturePair(res);
+        if (this.multiTrial) this.accumPair = this.textures.createTexturePair(res);
       }
       this.dataPair = this.textures.createTexturePair(res);
     }
@@ -116,6 +130,9 @@ export class Simulator {
     }
     if (this.chunking) {
       this.compileAndStore(compiler, 'blit', ShaderBuilder.buildBlit());
+    }
+    if (this.multiTrial) {
+      this.compileAndStore(compiler, 'blend', ShaderBuilder.buildBlend());
     }
   }
 
@@ -173,7 +190,10 @@ export class Simulator {
 
   getCurrentChunkInfo(): { cx: number; cy: number; texture: WebGLTexture } | null {
     if (!this.chunking || !this.animatingFirstChunk) return null;
-    return { cx: this.currentChunkX, cy: this.currentChunkY, texture: this.chunkDataPair![this.chunkReadIndex] };
+    const tex = (this.multiTrial && this.trialsCompleted > 0)
+      ? this.chunkAccumPair![this.accumReadIndex]
+      : this.chunkDataPair![this.chunkReadIndex];
+    return { cx: this.currentChunkX, cy: this.currentChunkY, texture: tex };
   }
 
   reset(): void {
@@ -185,6 +205,9 @@ export class Simulator {
     this.chunkFrameCount = 0;
     this.chunkReadIndex = 0;
     this.animatingFirstChunk = false;
+    this.currentTrial = 0;
+    this.trialsCompleted = 0;
+    this.accumReadIndex = 0;
     for (let i = 0; i < this.chunkDone.length; i++) this.chunkDone[i] = false;
 
     const gl = this.gl;
@@ -253,7 +276,7 @@ export class Simulator {
     const gl = this.gl;
 
     if (this.chunkFrameCount >= this.config.maxIter) {
-      this.blitChunkToResult(this.currentChunkX, this.currentChunkY);
+      this.blitToResult(this.currentChunkX, this.currentChunkY, this.chunkDataPair![this.chunkReadIndex]);
       this.advanceChunk();
       if (this.currentChunkY < this.chunksPerSide) {
         this.chunkFrameCount = 0;
@@ -451,8 +474,7 @@ export class Simulator {
     if (this.modeKey === 'divergenceDistance') {
       this.setPhysicsUniforms(prog.program);
     }
-    this.uniforms.set1f(prog.program, 'u_perturb', this.config.perturb);
-    this.uniforms.set1f(prog.program, 'u_seed', this.config.seed);
+    this.setPerturbUniforms(prog.program);
     this.uniforms.set2f(prog.program, 'u_chunkOffset', 0, 0);
     this.uniforms.set1f(prog.program, 'u_chunkScale', 1.0);
     this.attachDivOutputs(rIdx, false);
@@ -486,8 +508,7 @@ export class Simulator {
     if (this.modeKey === 'divergenceDistance') {
       this.setPhysicsUniforms(prog.program);
     }
-    this.uniforms.set1f(prog.program, 'u_perturb', this.config.perturb);
-    this.uniforms.set1f(prog.program, 'u_seed', this.config.seed);
+    this.setPerturbUniforms(prog.program);
     this.uniforms.set2f(prog.program, 'u_chunkOffset', cx / this.chunksPerSide, cy / this.chunksPerSide);
     this.uniforms.set1f(prog.program, 'u_chunkScale', 1.0 / this.chunksPerSide);
     this.attachDivOutputs(0, true);
@@ -513,7 +534,7 @@ export class Simulator {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
-  private blitChunkToResult(cx: number, cy: number): void {
+  private blitToResult(cx: number, cy: number, src: WebGLTexture): void {
     const gl = this.gl;
     const chunkSize = this.config.chunkSize;
     const idx = cy * this.chunksPerSide + cx;
@@ -523,7 +544,7 @@ export class Simulator {
     this.detachAll();
     gl.useProgram(prog.program);
     gl.bindVertexArray(prog.vao);
-    this.textures.bindTexture(0, this.chunkDataPair![this.chunkReadIndex]);
+    this.textures.bindTexture(0, src);
     this.uniforms.set1i(prog.program, 'u_src', 0);
     this.fb.attachColor(gl.COLOR_ATTACHMENT0, this.chunkResults[idx]);
     gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
@@ -605,6 +626,16 @@ export class Simulator {
     }
   }
 
+  private trialSeed(): number {
+    return this.config.seed + this.currentTrial * 1000.0;
+  }
+
+  private setPerturbUniforms(program: WebGLProgram): void {
+    this.uniforms.set1f(program, 'u_perturb', this.config.perturb);
+    this.uniforms.set1f(program, 'u_seed', this.trialSeed());
+    this.uniforms.set1i(program, 'u_perturbMode', this.config.perturbDistribution === 'gaussian' ? 1 : 0);
+  }
+
   // ─── Divergence orchestration ───
 
   startDivergence(onRender: () => void): void {
@@ -634,9 +665,10 @@ export class Simulator {
 
     if (this.chunking) {
       if (this.chunkFrameCount >= this.config.maxIter) {
-        this.blitChunkToResult(this.currentChunkX, this.currentChunkY);
-        this.advanceChunk();
-        if (this.currentChunkY < this.chunksPerSide) {
+        // current trial of the current tile just finished
+        this.finishChunkTrial();
+        if (this.currentTrial < this.trials) {
+          // run the next trial on the SAME tile
           this.chunkFrameCount = 0;
           this.chunkReadIndex = 0;
           gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
@@ -646,8 +678,18 @@ export class Simulator {
           gl.bindVertexArray(null);
           this.animatingFirstChunk = true;
         } else {
-          this.animatingFirstChunk = false;
-          this.complete = true;
+          // all trials for this tile done -> store mean and advance
+          const src = this.multiTrial
+            ? this.chunkAccumPair![this.accumReadIndex]
+            : this.chunkDataPair![this.chunkReadIndex];
+          this.blitToResult(this.currentChunkX, this.currentChunkY, src);
+          this.advanceChunk();
+          if (this.currentChunkY < this.chunksPerSide) {
+            this.startChunkTile();
+          } else {
+            this.animatingFirstChunk = false;
+            this.complete = true;
+          }
         }
         return;
       }
@@ -655,6 +697,7 @@ export class Simulator {
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
       for (let i = 0; i < batchSize && this.chunkFrameCount < this.config.maxIter; i++) {
         this.chunkFrameCount++;
+        this.frameCount++;
         const rIdx = this.chunkReadIndex;
         const wIdx = (1 - this.chunkReadIndex) as 0 | 1;
         this.stepDivergeChunk(rIdx, wIdx);
@@ -663,6 +706,27 @@ export class Simulator {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.bindVertexArray(null);
     } else {
+      if (this.frameCount >= this.config.maxIter) {
+        // current trial just finished -> accumulate then start next or finish
+        if (this.multiTrial) {
+          this.runBlend(this.accumPair!, this.dataPair![this.readIndex], this.config.resolution, this.trialsCompleted);
+        }
+        this.trialsCompleted++;
+        this.currentTrial = this.trialsCompleted;
+        if (this.currentTrial < this.trials) {
+          this.frameCount = 0;
+          this.readIndex = 0;
+          gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
+          this.detachAll();
+          this.initDivergenceFull(0, this.config.resolution);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+          gl.bindVertexArray(null);
+        } else {
+          this.complete = true;
+        }
+        return;
+      }
+
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
       for (let i = 0; i < batchSize && this.frameCount < this.config.maxIter; i++) {
         this.frameCount++;
@@ -673,8 +737,63 @@ export class Simulator {
       }
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.bindVertexArray(null);
-      if (this.frameCount >= this.config.maxIter) this.complete = true;
     }
+  }
+
+  private finishChunkTrial(): void {
+    if (this.multiTrial) {
+      this.runBlend(
+        this.chunkAccumPair!,
+        this.chunkDataPair![this.chunkReadIndex],
+        this.config.chunkSize,
+        this.trialsCompleted,
+      );
+    }
+    this.trialsCompleted++;
+    this.currentTrial = this.trialsCompleted;
+  }
+
+  private startChunkTile(): void {
+    this.currentTrial = 0;
+    this.trialsCompleted = 0;
+    this.accumReadIndex = 0;
+    this.chunkFrameCount = 0;
+    this.chunkReadIndex = 0;
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
+    this.detachAll();
+    this.initChunk(this.currentChunkX, this.currentChunkY);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindVertexArray(null);
+    this.animatingFirstChunk = true;
+  }
+
+  private runBlend(
+    accumPair: [WebGLTexture, WebGLTexture],
+    srcTex: WebGLTexture,
+    size: number,
+    completedBefore: number,
+  ): void {
+    const gl = this.gl;
+    const wIdx = (1 - this.accumReadIndex) as 0 | 1;
+    const weight = 1.0 / (completedBefore + 1);
+    const prog = this.getProg('blend');
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
+    this.detachAll();
+    gl.useProgram(prog.program);
+    gl.bindVertexArray(prog.vao);
+    this.textures.bindTexture(0, accumPair[this.accumReadIndex]);
+    this.textures.bindTexture(1, srcTex);
+    this.uniforms.set1i(prog.program, 'u_accum', 0);
+    this.uniforms.set1i(prog.program, 'u_newTrial', 1);
+    this.uniforms.set1f(prog.program, 'u_weight', weight);
+    this.fb.attachColor(gl.COLOR_ATTACHMENT0, accumPair[wIdx]);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+    gl.viewport(0, 0, size, size);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    this.accumReadIndex = wIdx;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindVertexArray(null);
   }
 
   private advanceChunk(): void {
@@ -688,10 +807,23 @@ export class Simulator {
   // ─── Public getters ───
 
   getDataTexture(): WebGLTexture {
+    if (this.multiTrial && this.trialsCompleted > 0) {
+      return this.accumPair![this.accumReadIndex];
+    }
     return this.dataPair![this.readIndex];
   }
 
-  getFrameCount(): number { return this.frameCount; }
+  getFrameCount(): number {
+    if (this.multiTrial && !this.chunking) {
+      return this.trialsCompleted * this.config.maxIter + this.frameCount;
+    }
+    return this.frameCount;
+  }
+
+  getTrialProgress(): { current: number; total: number } {
+    return { current: Math.min(this.currentTrial + 1, this.trials), total: this.trials };
+  }
+
   isComplete(): boolean { return this.complete; }
 
   dispose(): void {
@@ -714,6 +846,8 @@ export class Simulator {
     if (this.chunkPerturbedAPair) pairs.push(this.chunkPerturbedAPair);
     if (this.chunkPerturbedBPair) pairs.push(this.chunkPerturbedBPair);
     if (this.chunkDataPair) pairs.push(this.chunkDataPair);
+    if (this.accumPair) pairs.push(this.accumPair);
+    if (this.chunkAccumPair) pairs.push(this.chunkAccumPair);
     for (const p of pairs) { gl.deleteTexture(p[0]); gl.deleteTexture(p[1]); }
     for (const t of this.chunkResults) gl.deleteTexture(t);
   }

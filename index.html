@@ -294,6 +294,17 @@
             <label>Perturbation <span id="perturbValue">0.00001</span></label>
             <input type="range" id="perturb" min="0.000001" max="0.001" step="0.000001" value="0.00001">
         </div>
+        <div id="perturbModeControl" class="control-group" style="display: none;">
+            <label for="perturbDistribution">Perturb Distribution</label>
+            <select id="perturbDistribution">
+                <option value="uniform" selected>Uniform (fixed box)</option>
+                <option value="gaussian">Gaussian (sigma = perturb)</option>
+            </select>
+        </div>
+        <div id="trialsControl" class="control-group" style="display: none;">
+            <label for="trials">Monte-Carlo Trials <span id="trialsValue">1</span></label>
+            <input type="range" id="trials" min="1" max="64" step="1" value="1">
+        </div>
     </div>
 
     <div id="visualizationPanel" class="panel">
@@ -362,6 +373,7 @@
     <div style="margin-bottom: 8px;">
         <span id="frameRow">Frame: <span id="frameCount">0</span></span> |
         <span id="maxDistRow">Max Dist: <span id="maxDistance">0.00</span></span> |
+        <span id="trialRow" style="display: none;">Trial: <span id="trialCount">1/1</span></span> |
         FPS: <span id="fps">0</span> |
         Zoom: <span id="zoomLevel">1</span>
     </div>
