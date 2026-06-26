@@ -80,6 +80,15 @@ vec2 getChunkedUV(vec2 v_uv, vec2 chunkOffset, float chunkScale) {
 `;
   }
 
+  private static bilinearHelpers(): string {
+    return `
+vec4 bilinear4(vec2 uv, vec4 c00, vec4 c10, vec4 c01, vec4 c11) {
+    float u = uv.x, v = uv.y;
+    return (1.0-u)*(1.0-v)*c00 + u*(1.0-v)*c10 + (1.0-u)*v*c01 + u*v*c11;
+}
+`;
+  }
+
   private static perturbHelpers(): string {
     return `
 uniform int u_perturbMode;
@@ -96,34 +105,30 @@ float samplePerturb(vec2 hi) {
 
   private static rigidDistanceInit(): string {
     return `${HEADER}
-uniform vec4 u_initialState;
-uniform vec2 u_xRange;
-uniform vec2 u_yRange;
-uniform vec4 u_xDir;
-uniform vec4 u_yDir;
+uniform vec4 u_c00;
+uniform vec4 u_c10;
+uniform vec4 u_c01;
+uniform vec4 u_c11;
 uniform vec2 u_chunkOffset;
 uniform float u_chunkScale;
 in vec2 v_uv;
 layout(location = 0) out vec4 fragColor;
 
+${this.bilinearHelpers()}
 ${this.chunkCoordHelpers()}
 
 void main() {
     vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
-    float dx = mix(u_xRange.x, u_xRange.y, uv.x);
-    float dy = mix(u_yRange.x, u_yRange.y, uv.y);
-    vec4 state = u_initialState + dx * u_xDir + dy * u_yDir;
-    fragColor = state;
+    fragColor = bilinear4(uv, u_c00, u_c10, u_c01, u_c11);
 }`;
   }
 
   private static rigidDivergenceInit(): string {
     return `${HEADER}
-uniform vec4 u_initialState;
-uniform vec2 u_xRange;
-uniform vec2 u_yRange;
-uniform vec4 u_xDir;
-uniform vec4 u_yDir;
+uniform vec4 u_c00;
+uniform vec4 u_c10;
+uniform vec4 u_c01;
+uniform vec4 u_c11;
 uniform float u_perturb;
 uniform float u_seed;
 uniform vec2 u_chunkOffset;
@@ -135,13 +140,12 @@ layout(location = 2) out vec4 divergenceData;
 
 ${hashFrag}
 ${this.perturbHelpers()}
+${this.bilinearHelpers()}
 ${this.chunkCoordHelpers()}
 
 void main() {
     vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
-    float dx = mix(u_xRange.x, u_xRange.y, uv.x);
-    float dy = mix(u_yRange.x, u_yRange.y, uv.y);
-    vec4 state = u_initialState + dx * u_xDir + dy * u_yDir;
+    vec4 state = bilinear4(uv, u_c00, u_c10, u_c01, u_c11);
 
     float perturb_theta1 = samplePerturb(uv * 1000.0 + u_seed);
     float perturb_theta2 = samplePerturb(uv * 1000.0 + vec2(100.0, u_seed));
@@ -154,30 +158,27 @@ void main() {
 
   private static elasticDistanceInit(): string {
     return `${HEADER}
-uniform vec4 u_initialA;
-uniform vec4 u_initialB;
-uniform vec2 u_xRange;
-uniform vec2 u_yRange;
-uniform vec4 u_xDirA;
-uniform vec4 u_xDirB;
-uniform vec4 u_yDirA;
-uniform vec4 u_yDirB;
+uniform vec4 u_cA00;
+uniform vec4 u_cA10;
+uniform vec4 u_cA01;
+uniform vec4 u_cA11;
+uniform vec4 u_cB00;
+uniform vec4 u_cB10;
+uniform vec4 u_cB01;
+uniform vec4 u_cB11;
 uniform vec2 u_chunkOffset;
 uniform float u_chunkScale;
 in vec2 v_uv;
 layout(location = 0) out vec4 stateA;
 layout(location = 1) out vec4 stateB;
 
+${this.bilinearHelpers()}
 ${this.chunkCoordHelpers()}
 
 void main() {
     vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
-    float dx = mix(u_xRange.x, u_xRange.y, uv.x);
-    float dy = mix(u_yRange.x, u_yRange.y, uv.y);
-    vec4 a = u_initialA + dx * u_xDirA + dy * u_yDirA;
-    vec4 b = u_initialB + dx * u_xDirB + dy * u_yDirB;
-    stateA = a;
-    stateB = b;
+    stateA = bilinear4(uv, u_cA00, u_cA10, u_cA01, u_cA11);
+    stateB = bilinear4(uv, u_cB00, u_cB10, u_cB01, u_cB11);
 }`;
   }
 
@@ -187,14 +188,14 @@ void main() {
 
   private static nonlinearDivergenceInit(): string {
     return `${HEADER}
-uniform vec4 u_initialA;
-uniform vec4 u_initialB;
-uniform vec2 u_xRange;
-uniform vec2 u_yRange;
-uniform vec4 u_xDirA;
-uniform vec4 u_xDirB;
-uniform vec4 u_yDirA;
-uniform vec4 u_yDirB;
+uniform vec4 u_cA00;
+uniform vec4 u_cA10;
+uniform vec4 u_cA01;
+uniform vec4 u_cA11;
+uniform vec4 u_cB00;
+uniform vec4 u_cB10;
+uniform vec4 u_cB01;
+uniform vec4 u_cB11;
 uniform float u_perturb;
 uniform float u_seed;
 uniform vec2 u_chunkOffset;
@@ -208,14 +209,13 @@ layout(location = 4) out vec4 divergenceData;
 
 ${hashFrag}
 ${this.perturbHelpers()}
+${this.bilinearHelpers()}
 ${this.chunkCoordHelpers()}
 
 void main() {
     vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
-    float dx = mix(u_xRange.x, u_xRange.y, uv.x);
-    float dy = mix(u_yRange.x, u_yRange.y, uv.y);
-    vec4 a = u_initialA + dx * u_xDirA + dy * u_yDirA;
-    vec4 b = u_initialB + dx * u_xDirB + dy * u_yDirB;
+    vec4 a = bilinear4(uv, u_cA00, u_cA10, u_cA01, u_cA11);
+    vec4 b = bilinear4(uv, u_cB00, u_cB10, u_cB01, u_cB11);
 
     float perturb_theta1 = samplePerturb(uv * 1000.0 + u_seed);
     float perturb_theta2 = samplePerturb(uv * 1000.0 + vec2(100.0, u_seed));
@@ -231,14 +231,14 @@ void main() {
 
   private static elasticDivergenceInit(): string {
     return `${HEADER}
-uniform vec4 u_initialA;
-uniform vec4 u_initialB;
-uniform vec2 u_xRange;
-uniform vec2 u_yRange;
-uniform vec4 u_xDirA;
-uniform vec4 u_xDirB;
-uniform vec4 u_yDirA;
-uniform vec4 u_yDirB;
+uniform vec4 u_cA00;
+uniform vec4 u_cA10;
+uniform vec4 u_cA01;
+uniform vec4 u_cA11;
+uniform vec4 u_cB00;
+uniform vec4 u_cB10;
+uniform vec4 u_cB01;
+uniform vec4 u_cB11;
 uniform float u_perturb;
 uniform float u_seed;
 uniform vec2 u_chunkOffset;
@@ -252,14 +252,13 @@ layout(location = 4) out vec4 divergenceData;
 
 ${hashFrag}
 ${this.perturbHelpers()}
+${this.bilinearHelpers()}
 ${this.chunkCoordHelpers()}
 
 void main() {
     vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
-    float dx = mix(u_xRange.x, u_xRange.y, uv.x);
-    float dy = mix(u_yRange.x, u_yRange.y, uv.y);
-    vec4 a = u_initialA + dx * u_xDirA + dy * u_yDirA;
-    vec4 b = u_initialB + dx * u_xDirB + dy * u_yDirB;
+    vec4 a = bilinear4(uv, u_cA00, u_cA10, u_cA01, u_cA11);
+    vec4 b = bilinear4(uv, u_cB00, u_cB10, u_cB01, u_cB11);
 
     float perturb_theta1 = samplePerturb(uv * 1000.0 + u_seed);
     float perturb_theta2 = samplePerturb(uv * 1000.0 + vec2(100.0, u_seed));
@@ -713,11 +712,10 @@ void main() {
 
   private static rigidDivDistanceInit(): string {
     return `${HEADER}
-uniform vec4 u_initialState;
-uniform vec2 u_xRange;
-uniform vec2 u_yRange;
-uniform vec4 u_xDir;
-uniform vec4 u_yDir;
+uniform vec4 u_c00;
+uniform vec4 u_c10;
+uniform vec4 u_c01;
+uniform vec4 u_c11;
 uniform float u_perturb;
 uniform float u_seed;
 uniform float u_L1;
@@ -732,13 +730,12 @@ layout(location = 2) out vec4 divergenceData;
 ${hashFrag}
 ${this.perturbHelpers()}
 ${bob2Frag}
+${this.bilinearHelpers()}
 ${this.chunkCoordHelpers()}
 
 void main() {
     vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
-    float dx = mix(u_xRange.x, u_xRange.y, uv.x);
-    float dy = mix(u_yRange.x, u_yRange.y, uv.y);
-    vec4 state = u_initialState + dx * u_xDir + dy * u_yDir;
+    vec4 state = bilinear4(uv, u_c00, u_c10, u_c01, u_c11);
 
     float perturb_theta1 = samplePerturb(uv * 1000.0 + u_seed);
     float perturb_theta2 = samplePerturb(uv * 1000.0 + vec2(100.0, u_seed));
@@ -754,14 +751,14 @@ void main() {
 
   private static elasticDivDistanceInit(): string {
     return `${HEADER}
-uniform vec4 u_initialA;
-uniform vec4 u_initialB;
-uniform vec2 u_xRange;
-uniform vec2 u_yRange;
-uniform vec4 u_xDirA;
-uniform vec4 u_xDirB;
-uniform vec4 u_yDirA;
-uniform vec4 u_yDirB;
+uniform vec4 u_cA00;
+uniform vec4 u_cA10;
+uniform vec4 u_cA01;
+uniform vec4 u_cA11;
+uniform vec4 u_cB00;
+uniform vec4 u_cB10;
+uniform vec4 u_cB01;
+uniform vec4 u_cB11;
 uniform float u_perturb;
 uniform float u_seed;
 uniform float u_L1;
@@ -778,14 +775,13 @@ layout(location = 4) out vec4 divergenceData;
 ${hashFrag}
 ${this.perturbHelpers()}
 ${bob2Frag}
+${this.bilinearHelpers()}
 ${this.chunkCoordHelpers()}
 
 void main() {
     vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
-    float dx = mix(u_xRange.x, u_xRange.y, uv.x);
-    float dy = mix(u_yRange.x, u_yRange.y, uv.y);
-    vec4 a = u_initialA + dx * u_xDirA + dy * u_yDirA;
-    vec4 b = u_initialB + dx * u_xDirB + dy * u_yDirB;
+    vec4 a = bilinear4(uv, u_cA00, u_cA10, u_cA01, u_cA11);
+    vec4 b = bilinear4(uv, u_cB00, u_cB10, u_cB01, u_cB11);
 
     float perturb_theta1 = samplePerturb(uv * 1000.0 + u_seed);
     float perturb_theta2 = samplePerturb(uv * 1000.0 + vec2(100.0, u_seed));

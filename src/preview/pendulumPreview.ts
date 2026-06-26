@@ -1,5 +1,5 @@
 import type { SimulationConfig, SystemType } from '../types/config.ts';
-import { computeDirections, rigidPack, elasticPackA, elasticPackB } from '../types/config.ts';
+import { computeCorners, bilinearSample, rigidPack, elasticPackA, elasticPackB } from '../types/config.ts';
 import { ShaderCompiler } from '../webgl/shaderCompiler.ts';
 import { ShaderBuilder } from '../webgl/shaderBuilder.ts';
 import { FrequencyAnalyzer } from './frequencyAnalyzer.ts';
@@ -296,12 +296,26 @@ export class PendulumPreview {
     if (v) this.onLeave();
   }
 
+  private sampleStateAt(nx: number, ny: number): number[] {
+    const ps = this.config.phaseSpace;
+    if (ps.mode === 'tiling') {
+      const t = ps.tiling;
+      let col = Math.floor(nx * t.cols);
+      let row = Math.floor(ny * t.rows);
+      col = Math.max(0, Math.min(t.cols - 1, col));
+      row = Math.max(0, Math.min(t.rows - 1, row));
+      const u = nx * t.cols - col;
+      const v = ny * t.rows - row;
+      return bilinearSample(computeCorners(this.config, col, row), u, v);
+    }
+    return bilinearSample(computeCorners(this.config), nx, ny);
+  }
+
   private onClick(px: number, py: number) {
     const nx = px / this.mainCanvas.width;
     const ny = 1 - py / this.mainCanvas.height;
 
-    const dx = this.config.phaseSpace.x.min + nx * (this.config.phaseSpace.x.max - this.config.phaseSpace.x.min);
-    const dy = this.config.phaseSpace.y.min + ny * (this.config.phaseSpace.y.max - this.config.phaseSpace.y.min);
+    const state8 = this.sampleStateAt(nx, ny);
 
     this.active = true;
     this.simulating = false;
@@ -322,7 +336,7 @@ export class PendulumPreview {
     this.playPauseBtn.textContent = '⏸ Pause';
     this.playbackControls.style.display = 'none';
 
-    this.gpuInit(dx, dy);
+    this.gpuInit(state8);
     this.readStates();
     this.trail.push(this.bob2(this.baseSA, this.baseSB));
     this.drawFrame();
@@ -359,39 +373,18 @@ export class PendulumPreview {
     }
   }
 
-  private gpuInit(dx: number, dy: number) {
+  private gpuInit(state8: number[]) {
     const gl = this.gl;
     const p = this.use(this.initProg);
-    const iv = this.config.phaseSpace.initialValues;
-    const iv8 = [iv.angle1, iv.velocity1, iv.stretch1, iv.stretchRate1, iv.angle2, iv.velocity2, iv.stretch2, iv.stretchRate2];
-    const dirs = computeDirections(this.config);
 
     if (this.systemKey === 'rigid') {
-      const o = rigidPack(iv8);
-      const xd = rigidPack(dirs.xDir);
-      const yd = rigidPack(dirs.yDir);
-      gl.uniform4f(this.u(p, 'u_initialState'),
-        o[0] + dx * xd[0] + dy * yd[0],
-        o[1] + dx * xd[1] + dy * yd[1],
-        o[2] + dx * xd[2] + dy * yd[2],
-        o[3] + dx * xd[3] + dy * yd[3]);
+      const s = rigidPack(state8);
+      gl.uniform4f(this.u(p, 'u_initialState'), s[0], s[1], s[2], s[3]);
     } else {
-      const oa = elasticPackA(iv8);
-      const ob = elasticPackB(iv8);
-      const xda = elasticPackA(dirs.xDir);
-      const xdb = elasticPackB(dirs.xDir);
-      const yda = elasticPackA(dirs.yDir);
-      const ydb = elasticPackB(dirs.yDir);
-      gl.uniform4f(this.u(p, 'u_initialA'),
-        oa[0] + dx * xda[0] + dy * yda[0],
-        oa[1] + dx * xda[1] + dy * yda[1],
-        oa[2] + dx * xda[2] + dy * yda[2],
-        oa[3] + dx * xda[3] + dy * yda[3]);
-      gl.uniform4f(this.u(p, 'u_initialB'),
-        ob[0] + dx * xdb[0] + dy * ydb[0],
-        ob[1] + dx * xdb[1] + dy * ydb[1],
-        ob[2] + dx * xdb[2] + dy * ydb[2],
-        ob[3] + dx * xdb[3] + dy * ydb[3]);
+      const a = elasticPackA(state8);
+      const b = elasticPackB(state8);
+      gl.uniform4f(this.u(p, 'u_initialA'), a[0], a[1], a[2], a[3]);
+      gl.uniform4f(this.u(p, 'u_initialB'), b[0], b[1], b[2], b[3]);
     }
 
     gl.uniform1f(this.u(p, 'u_perturb'), this.config.perturb);

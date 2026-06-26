@@ -141,7 +141,7 @@
             border-radius: 3px;
         }
     </style>
-  <script type="module" crossorigin src="/Stupendulous-/assets/index-DEhqj11n.js"></script>
+  <script type="module" crossorigin src="/Stupendulous-/assets/index-s3pvigLN.js"></script>
 </head>
 <body>
     <div id="modeIndicator" style="margin-bottom: 8px;">Mode: Bob2 Distance</div>
@@ -239,10 +239,27 @@
         </div>
 
         <div class="axis-section">
-            <div class="axis-title">Oblique Slice</div>
-            <div class="control-group" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                <button type="button" id="obliqueBtn">🎲 Random Oblique Angle</button>
-                <span id="obliqueIndicator" style="display:none; font-size:0.72rem; color:#0d4;"></span>
+            <div class="axis-title">Slice Mode</div>
+            <div class="control-group">
+                <label for="sliceMode">Mode</label>
+                <select id="sliceMode">
+                    <option value="manual" selected>Manual Axes</option>
+                    <option value="tiling">Oblique Tiling</option>
+                </select>
+            </div>
+            <div id="tilingControls" style="display:none;">
+                <div class="control-group">
+                    <label>Grid (cols × rows)</label>
+                    <div class="range-row">
+                        <input type="number" id="tileCols" value="2" min="1" max="8" step="1">
+                        <span>×</span>
+                        <input type="number" id="tileRows" value="2" min="1" max="8" step="1">
+                    </div>
+                </div>
+                <div class="control-group" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <button type="button" id="regenerateTilesBtn">🎲 Regenerate</button>
+                    <span id="tilingIndicator" style="font-size:0.72rem; color:#0d4;"></span>
+                </div>
             </div>
         </div>
 
@@ -383,6 +400,7 @@
         <span id="frameRow">Frame: <span id="frameCount">0</span></span> |
         <span id="maxDistRow">Max Dist: <span id="maxDistance">0.00</span></span> |
         <span id="trialRow" style="display: none;">Trial: <span id="trialCount">1/1</span></span> |
+        <span id="tileRow" style="display: none;">Tile: <span id="tileProgress">0/0</span></span> |
         FPS: <span id="fps">0</span> |
         Zoom: <span id="zoomLevel">1</span>
     </div>

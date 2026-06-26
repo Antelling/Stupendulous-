@@ -1,5 +1,5 @@
 import type { SimulationConfig } from '../types/config.ts';
-import { computeDirections, rigidPack, elasticPackA, elasticPackB } from '../types/config.ts';
+import { computeCorners, rigidPack, elasticPackA, elasticPackB } from '../types/config.ts';
 import { TextureManager } from '../webgl/textureManager.ts';
 import { FramebufferManager } from '../webgl/framebufferManager.ts';
 import { UniformSetter } from '../webgl/uniformSetter.ts';
@@ -39,6 +39,8 @@ export class Simulator {
   private framebuffer: WebGLFramebuffer;
   private programs: Map<string, CompiledProgram> = new Map();
   private onDivergenceRender: (() => void) | null = null;
+
+  private cornerOverride: [number[], number[], number[], number[]] | null = null;
 
   private chunking = false;
   private chunksPerSide = 1;
@@ -152,32 +154,38 @@ export class Simulator {
     return p;
   }
 
-  private setPhaseSpaceUniforms(program: WebGLProgram): void {
-    const ps = this.config.phaseSpace;
-    const iv = ps.initialValues;
+  setCorners(corners: [number[], number[], number[], number[]] | null): void {
+    this.cornerOverride = corners;
+  }
+
+  private setCornerUniforms(program: WebGLProgram): void {
+    const corners = this.cornerOverride ?? computeCorners(this.config);
     if (this.systemKey === 'rigid') {
-      this.uniforms.set4f(program, 'u_initialState', iv.angle1, iv.velocity1, iv.angle2, iv.velocity2);
+      const c00 = rigidPack(corners[0]);
+      const c10 = rigidPack(corners[1]);
+      const c01 = rigidPack(corners[2]);
+      const c11 = rigidPack(corners[3]);
+      this.uniforms.set4f(program, 'u_c00', c00[0], c00[1], c00[2], c00[3]);
+      this.uniforms.set4f(program, 'u_c10', c10[0], c10[1], c10[2], c10[3]);
+      this.uniforms.set4f(program, 'u_c01', c01[0], c01[1], c01[2], c01[3]);
+      this.uniforms.set4f(program, 'u_c11', c11[0], c11[1], c11[2], c11[3]);
     } else {
-      this.uniforms.set4f(program, 'u_initialA', iv.angle1, iv.velocity1, iv.stretch1, iv.stretchRate1);
-      this.uniforms.set4f(program, 'u_initialB', iv.angle2, iv.velocity2, iv.stretch2, iv.stretchRate2);
-    }
-    this.uniforms.set2f(program, 'u_xRange', ps.x.min, ps.x.max);
-    this.uniforms.set2f(program, 'u_yRange', ps.y.min, ps.y.max);
-    const dirs = computeDirections(this.config);
-    if (this.systemKey === 'rigid') {
-      const xd = rigidPack(dirs.xDir);
-      const yd = rigidPack(dirs.yDir);
-      this.uniforms.set4f(program, 'u_xDir', xd[0], xd[1], xd[2], xd[3]);
-      this.uniforms.set4f(program, 'u_yDir', yd[0], yd[1], yd[2], yd[3]);
-    } else {
-      const xda = elasticPackA(dirs.xDir);
-      const xdb = elasticPackB(dirs.xDir);
-      const yda = elasticPackA(dirs.yDir);
-      const ydb = elasticPackB(dirs.yDir);
-      this.uniforms.set4f(program, 'u_xDirA', xda[0], xda[1], xda[2], xda[3]);
-      this.uniforms.set4f(program, 'u_xDirB', xdb[0], xdb[1], xdb[2], xdb[3]);
-      this.uniforms.set4f(program, 'u_yDirA', yda[0], yda[1], yda[2], yda[3]);
-      this.uniforms.set4f(program, 'u_yDirB', ydb[0], ydb[1], ydb[2], ydb[3]);
+      const cA00 = elasticPackA(corners[0]);
+      const cA10 = elasticPackA(corners[1]);
+      const cA01 = elasticPackA(corners[2]);
+      const cA11 = elasticPackA(corners[3]);
+      const cB00 = elasticPackB(corners[0]);
+      const cB10 = elasticPackB(corners[1]);
+      const cB01 = elasticPackB(corners[2]);
+      const cB11 = elasticPackB(corners[3]);
+      this.uniforms.set4f(program, 'u_cA00', cA00[0], cA00[1], cA00[2], cA00[3]);
+      this.uniforms.set4f(program, 'u_cA10', cA10[0], cA10[1], cA10[2], cA10[3]);
+      this.uniforms.set4f(program, 'u_cA01', cA01[0], cA01[1], cA01[2], cA01[3]);
+      this.uniforms.set4f(program, 'u_cA11', cA11[0], cA11[1], cA11[2], cA11[3]);
+      this.uniforms.set4f(program, 'u_cB00', cB00[0], cB00[1], cB00[2], cB00[3]);
+      this.uniforms.set4f(program, 'u_cB10', cB10[0], cB10[1], cB10[2], cB10[3]);
+      this.uniforms.set4f(program, 'u_cB01', cB01[0], cB01[1], cB01[2], cB01[3]);
+      this.uniforms.set4f(program, 'u_cB11', cB11[0], cB11[1], cB11[2], cB11[3]);
     }
   }
 
@@ -326,7 +334,7 @@ export class Simulator {
     const prog = this.getProg('init');
     gl.useProgram(prog.program);
     gl.bindVertexArray(prog.vao);
-    this.setPhaseSpaceUniforms(prog.program);
+    this.setCornerUniforms(prog.program);
     this.uniforms.set2f(prog.program, 'u_chunkOffset', cx / this.chunksPerSide, cy / this.chunksPerSide);
     this.uniforms.set1f(prog.program, 'u_chunkScale', 1.0 / this.chunksPerSide);
 
@@ -373,7 +381,7 @@ export class Simulator {
     const prog = this.getProg('init');
     gl.useProgram(prog.program);
     gl.bindVertexArray(prog.vao);
-    this.setPhaseSpaceUniforms(prog.program);
+    this.setCornerUniforms(prog.program);
     this.uniforms.set2f(prog.program, 'u_chunkOffset', 0, 0);
     this.uniforms.set1f(prog.program, 'u_chunkScale', 1.0);
     if (this.isElastic) {
@@ -480,7 +488,7 @@ export class Simulator {
     const prog = this.getProg('init');
     gl.useProgram(prog.program);
     gl.bindVertexArray(prog.vao);
-    this.setPhaseSpaceUniforms(prog.program);
+    this.setCornerUniforms(prog.program);
     if (this.modeKey === 'divergenceDistance') {
       this.setPhysicsUniforms(prog.program);
     }
@@ -514,7 +522,7 @@ export class Simulator {
     const prog = this.getProg('init');
     gl.useProgram(prog.program);
     gl.bindVertexArray(prog.vao);
-    this.setPhaseSpaceUniforms(prog.program);
+    this.setCornerUniforms(prog.program);
     if (this.modeKey === 'divergenceDistance') {
       this.setPhysicsUniforms(prog.program);
     }

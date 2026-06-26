@@ -21,16 +21,21 @@ export interface PhaseSpaceAxis {
   max: number;
 }
 
+export type PhaseSpaceMode = 'manual' | 'tiling';
+
 export interface PhaseSpaceConfig {
   x: PhaseSpaceAxis;
   y: PhaseSpaceAxis;
   initialValues: Record<PhaseSpaceDimension, number>;
+  mode: PhaseSpaceMode;
+  tiling: TileConfig;
 }
 
-export interface ObliqueSlice {
-  enabled: boolean;
-  xDir: number[];
-  yDir: number[];
+export interface TileConfig {
+  cols: number;
+  rows: number;
+  toroidal: boolean;
+  controlNet: number[][][];
 }
 
 export interface SimulationConfig {
@@ -39,7 +44,6 @@ export interface SimulationConfig {
   resolution: Resolution;
   chunkSize: ChunkSize;
   phaseSpace: PhaseSpaceConfig;
-  oblique: ObliqueSlice;
   dt: number;
   iterationsPerFrame: number;
   maxIter: number;
@@ -140,14 +144,57 @@ export function basisVector(dim: PhaseSpaceDimension): number[] {
   return v;
 }
 
-export function computeDirections(config: SimulationConfig): { xDir: number[]; yDir: number[] } {
-  if (config.oblique.enabled) {
-    return { xDir: config.oblique.xDir, yDir: config.oblique.yDir };
+export function initialVector(config: SimulationConfig): number[] {
+  const iv = config.phaseSpace.initialValues;
+  return DIM_ORDER.map(d => iv[d]);
+}
+
+export function computeCorners(
+  config: SimulationConfig,
+  tileCol = 0,
+  tileRow = 0,
+): [number[], number[], number[], number[]] {
+  const ps = config.phaseSpace;
+  if (ps.mode === 'tiling') {
+    const t = ps.tiling;
+    const cols = t.cols;
+    const rows = t.rows;
+    const i0 = tileCol;
+    const i1 = t.toroidal ? (tileCol + 1) % cols : Math.min(tileCol + 1, cols);
+    const j0 = tileRow;
+    const j1 = t.toroidal ? (tileRow + 1) % rows : Math.min(tileRow + 1, rows);
+    const get = (col: number, row: number): number[] => t.controlNet[row][col];
+    const c00 = get(i0, j0);
+    const c10 = get(i1, j0);
+    const c01 = get(i0, j1);
+    const c11 = get(i1, j1);
+    return [c00.slice(), c10.slice(), c01.slice(), c11.slice()];
   }
-  return {
-    xDir: basisVector(config.phaseSpace.x.dimension),
-    yDir: basisVector(config.phaseSpace.y.dimension),
-  };
+  const iv = initialVector(config);
+  const xb = basisVector(ps.x.dimension);
+  const yb = basisVector(ps.y.dimension);
+  const add = (base: number[], sx: number, sy: number): number[] =>
+    base.map((v, i) => v + sx * xb[i] + sy * yb[i]);
+  return [
+    add(iv, ps.x.min, ps.y.min),
+    add(iv, ps.x.max, ps.y.min),
+    add(iv, ps.x.min, ps.y.max),
+    add(iv, ps.x.max, ps.y.max),
+  ];
+}
+
+export function bilinearSample(
+  corners: [number[], number[], number[], number[]],
+  u: number,
+  v: number,
+): number[] {
+  const [c00, c10, c01, c11] = corners;
+  const out = new Array(c00.length);
+  for (let i = 0; i < c00.length; i++) {
+    out[i] = (1 - u) * (1 - v) * c00[i] + u * (1 - v) * c10[i]
+      + (1 - u) * v * c01[i] + u * v * c11[i];
+  }
+  return out;
 }
 
 export function rigidPack(dir8: number[]): [number, number, number, number] {
@@ -162,33 +209,27 @@ export function elasticPackB(dir8: number[]): [number, number, number, number] {
   return [dir8[4], dir8[5], dir8[6], dir8[7]];
 }
 
-export function generateObliqueSlice(system: SystemType): ObliqueSlice {
+export function generateTiling(system: SystemType, cols: number, rows: number, center: number[]): TileConfig {
   const available = system === 'rigid' ? RIGID_DIMENSIONS : ELASTIC_DIMENSIONS;
-  const dot = (a: number[], b: number[]) => {
-    let s = 0;
-    for (let i = 0; i < a.length; i++) s += a[i] * b[i];
-    return s;
-  };
-  const raw = (): number[] => {
-    const v = new Array(DIM_ORDER.length).fill(0);
-    for (const d of available) {
-      const idx = DIM_ORDER.indexOf(d);
-      v[idx] = (Math.random() * 2 - 1) * DIM_SCALE[d];
+  const availIdx = available.map(d => DIM_ORDER.indexOf(d));
+  const net: number[][][] = [];
+  for (let r = 0; r < rows; r++) {
+    const rowPts: number[][] = [];
+    for (let c = 0; c < cols; c++) {
+      const pt = center.slice();
+      for (const idx of availIdx) {
+        const dim = DIM_ORDER[idx];
+        pt[idx] = center[idx] + (Math.random() * 2 - 1) * DIM_SCALE[dim];
+      }
+      rowPts.push(pt);
     }
-    return v;
-  };
-  const orthogonalize = (base: number[], other: number[]): number[] => {
-    const denom = dot(base, base) || 1;
-    const p = dot(other, base) / denom;
-    return other.map((v, i) => v - p * base[i]);
-  };
-
-  const xDir = raw();
-  let yDir = orthogonalize(xDir, raw());
-  if (dot(yDir, yDir) < 1e-6) {
-    yDir = orthogonalize(xDir, raw());
+    net.push(rowPts);
   }
-  return { enabled: true, xDir, yDir };
+  return { cols, rows, toroidal: cols >= 2 && rows >= 2, controlNet: net };
+}
+
+export function describeTiling(t: TileConfig): string {
+  return `${t.cols}×${t.rows}${t.toroidal ? ' torus' : ''}`;
 }
 
 export const DEFAULT_CONFIG: SimulationConfig = {
@@ -209,11 +250,8 @@ export const DEFAULT_CONFIG: SimulationConfig = {
       stretch2: 0,
       stretchRate2: 0,
     },
-  },
-  oblique: {
-    enabled: false,
-    xDir: basisVector('angle1'),
-    yDir: basisVector('angle2'),
+    mode: 'manual',
+    tiling: generateTiling('rigid', 2, 2, [0, 0, 0, 0, 0, 0, 0, 0]),
   },
   dt: 0.002,
   iterationsPerFrame: 10,

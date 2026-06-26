@@ -1,5 +1,5 @@
 import type { SimulationConfig, Colormap, PhaseSpaceDimension } from '../types/config.ts';
-import { SYSTEM_NAMES, MODE_NAMES, DIMENSION_LABELS, ELASTIC_DIMENSIONS, DIM_ORDER, DIM_SYMBOLS } from '../types/config.ts';
+import { SYSTEM_NAMES, MODE_NAMES, DIMENSION_LABELS, ELASTIC_DIMENSIONS, DIM_ORDER, DIM_SYMBOLS, describeTiling } from '../types/config.ts';
 
 export class UIController {
   private elements: Record<string, HTMLElement> = {};
@@ -16,7 +16,8 @@ export class UIController {
       'initStretch1', 'initStretchRate1', 'initStretch2', 'initStretchRate2',
       'dt', 'iterations', 'maxIter', 'perturb',
       'resetBtn', 'downloadBtn', 'zoomOutBtn', 'playBtn',
-      'obliqueBtn', 'obliqueIndicator',
+      'sliceMode', 'tileCols', 'tileRows', 'regenerateTilesBtn',
+      'tilingControls', 'tilingIndicator',
       'modeIndicator', 'subtitle', 'legendGradient',
       'frameCount', 'maxDistance', 'fps', 'zoomLevel',
       'iterValue', 'perturbValue',
@@ -24,7 +25,7 @@ export class UIController {
       'k1Value', 'k2Value',
       'elasticControls', 'maxIterControl', 'perturbControl',
       'perturbModeControl', 'trialsControl',
-      'frameRow', 'maxDistRow', 'trialRow', 'trialCount',
+      'frameRow', 'maxDistRow', 'trialRow', 'trialCount', 'tileRow', 'tileProgress',
     ];
 
     for (const id of ids) {
@@ -104,22 +105,21 @@ export class UIController {
     }
   }
 
-  updateObliqueUI(config: SimulationConfig): void {
-    const ind = this.getElement('obliqueIndicator') as HTMLElement | null;
-    if (!ind) return;
-    if (config.oblique.enabled) {
-      ind.style.display = 'inline-block';
-      const describe = (dir: number[]): string => {
-        const parts: string[] = [];
-        for (let i = 0; i < dir.length; i++) {
-          if (Math.abs(dir[i]) > 1e-9) parts.push(DIM_SYMBOLS[DIM_ORDER[i]]);
-        }
-        return parts.length ? parts.join('+') : '∅';
-      };
-      ind.textContent = `⚡ Oblique  X:${describe(config.oblique.xDir)}  Y:${describe(config.oblique.yDir)}`;
-    } else {
-      ind.style.display = 'none';
+  updateTilingUI(config: SimulationConfig): void {
+    const isTiling = config.phaseSpace.mode === 'tiling';
+    this.setDisplay('tilingControls', isTiling ? 'block' : 'none');
+    this.setInputValue('sliceMode', config.phaseSpace.mode);
+    this.setInputValue('tileCols', config.phaseSpace.tiling.cols);
+    this.setInputValue('tileRows', config.phaseSpace.tiling.rows);
+    const ind = this.getElement('tilingIndicator');
+    if (ind) {
+      ind.textContent = isTiling ? `⚡ ${describeTiling(config.phaseSpace.tiling)}` : '';
     }
+  }
+
+  updateTilingProgress(visible: boolean, current: number, total: number): void {
+    this.setDisplay('tileRow', visible ? 'inline' : 'none');
+    if (visible) this.setTextContent('tileProgress', `${current}/${total}`);
   }
 
   updatePhaseSpaceInputs(config: SimulationConfig): void {

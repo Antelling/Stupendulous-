@@ -1,9 +1,10 @@
 import type { SimulationConfig, PhaseSpaceDimension } from './types/config.ts';
-import { DEFAULT_CONFIG, ELASTIC_DIMENSIONS, RIGID_DIMENSIONS, generateObliqueSlice } from './types/config.ts';
+import { DEFAULT_CONFIG, ELASTIC_DIMENSIONS, RIGID_DIMENSIONS, generateTiling, initialVector, describeTiling } from './types/config.ts';
 import { QuadBuffer } from './webgl/quadBuffer.ts';
 import { TextureManager } from './webgl/textureManager.ts';
 import { UniformSetter } from './webgl/uniformSetter.ts';
 import { Simulator } from './simulation/simulator.ts';
+import { TileMosaic } from './simulation/tileMosaic.ts';
 import { Renderer } from './simulation/renderer.ts';
 import { ZoomController } from './simulation/zoomController.ts';
 import { UIController } from './ui/uiController.ts';
@@ -19,6 +20,7 @@ export class ChaosApp {
   private sharedTextures: TextureManager;
   private sharedUniforms: UniformSetter;
   private simulator: Simulator | null = null;
+  private tileMosaic: TileMosaic | null = null;
   private renderer: Renderer;
   private zoomController: ZoomController;
   private ui: UIController;
@@ -49,12 +51,12 @@ export class ChaosApp {
     this.stats = new StatsTracker();
     this.preview = new PendulumPreview(document.getElementById('canvasWrapper')!, canvas, this.gl, this.config);
     this.preview.onConfigChange = () => {
-      this.config.oblique.enabled = false;
+      this.config.phaseSpace.mode = 'manual';
       this.handleSystemChange();
       this.ui.updateModeUI(this.config);
       this.ui.updatePendulumParams(this.config);
       this.ui.updatePhaseSpaceInputs(this.config);
-      this.ui.updateObliqueUI(this.config);
+      this.ui.updateTilingUI(this.config);
       this.markStale();
     };
 
@@ -64,17 +66,32 @@ export class ChaosApp {
     this.animate();
   }
 
+  private isTilingMode(): boolean {
+    return this.config.phaseSpace.mode === 'tiling';
+  }
+
   private rebuildSimulator(): void {
     if (this.simulator) {
       this.simulator.dispose();
+      this.simulator = null;
     }
-    this.simulator = new Simulator(this.gl, this.config, this.quadBuffer.buffer);
-    this.preview.rebuildForConfig(this.config);
+    if (this.tileMosaic) {
+      this.tileMosaic.dispose();
+      this.tileMosaic = null;
+    }
 
-    if (this.config.vizMode === 'divergence' || this.config.vizMode === 'divergenceDistance') {
-      this.simulator.startDivergence(() => this.onDivergenceRender());
+    if (this.isTilingMode()) {
+      this.tileMosaic = new TileMosaic(this.gl, this.config, this.quadBuffer.buffer, this.sharedTextures, this.sharedUniforms, this.renderer);
+      this.tileMosaic.start();
+      this.preview.rebuildForConfig(this.config);
     } else {
-      this.simulator.reset();
+      this.simulator = new Simulator(this.gl, this.config, this.quadBuffer.buffer);
+      this.preview.rebuildForConfig(this.config);
+      if (this.config.vizMode === 'divergence' || this.config.vizMode === 'divergenceDistance') {
+        this.simulator.startDivergence(() => this.onDivergenceRender());
+      } else {
+        this.simulator.reset();
+      }
     }
   }
 
@@ -142,12 +159,12 @@ export class ChaosApp {
 
     this.ui.bindControl('systemType', (v) => {
       this.config.system = v as SimulationConfig['system'];
-      this.config.oblique.enabled = false;
       this.handleSystemChange();
+      this.regenerateTiling();
       this.ui.updateModeUI(this.config);
       this.ui.updatePendulumParams(this.config);
       this.ui.updatePhaseSpaceInputs(this.config);
-      this.ui.updateObliqueUI(this.config);
+      this.ui.updateTilingUI(this.config);
       this.markStale();
     });
 
@@ -171,21 +188,23 @@ export class ChaosApp {
     }, 'change');
 
     this.ui.bindControl('xDimension', (v) => {
-      this.exitOblique();
+      this.config.phaseSpace.mode = 'manual';
       this.config.phaseSpace.x.dimension = v as PhaseSpaceDimension;
       this.applyAxisDefaults('x');
       this.ui.updatePhaseSpaceInputs(this.config);
       this.ui.ensureDistinctDimensions(this.config.phaseSpace.x.dimension, this.config.phaseSpace.y.dimension);
+      this.ui.updateTilingUI(this.config);
       this.zoomController = new ZoomController(this.config, () => this.onZoomChange());
       this.markStale();
     }, 'change');
 
     this.ui.bindControl('yDimension', (v) => {
-      this.exitOblique();
+      this.config.phaseSpace.mode = 'manual';
       this.config.phaseSpace.y.dimension = v as PhaseSpaceDimension;
       this.applyAxisDefaults('y');
       this.ui.updatePhaseSpaceInputs(this.config);
       this.ui.ensureDistinctDimensions(this.config.phaseSpace.x.dimension, this.config.phaseSpace.y.dimension);
+      this.ui.updateTilingUI(this.config);
       this.zoomController = new ZoomController(this.config, () => this.onZoomChange());
       this.markStale();
     }, 'change');
@@ -270,7 +289,35 @@ export class ChaosApp {
 
     this.ui.bindButton('downloadBtn', () => this.download());
 
-    this.ui.bindButton('obliqueBtn', () => this.generateOblique());
+    this.ui.bindControl('sliceMode', (v) => {
+      this.config.phaseSpace.mode = v as 'manual' | 'tiling';
+      if (this.config.phaseSpace.mode === 'tiling') {
+        this.regenerateTiling();
+      }
+      this.ui.updateTilingUI(this.config);
+      this.markStale();
+    }, 'change');
+
+    this.ui.bindControl('tileCols', (v) => {
+      const cols = Math.max(1, parseInt(v) || 1);
+      this.config.phaseSpace.tiling.cols = cols;
+      this.regenerateTiling();
+      this.ui.updateTilingUI(this.config);
+      this.markStale();
+    }, 'change');
+
+    this.ui.bindControl('tileRows', (v) => {
+      const rows = Math.max(1, parseInt(v) || 1);
+      this.config.phaseSpace.tiling.rows = rows;
+      this.regenerateTiling();
+      this.ui.updateTilingUI(this.config);
+      this.markStale();
+    }, 'change');
+
+    this.ui.bindButton('regenerateTilesBtn', () => {
+      this.regenerateTiling();
+      this.markStale();
+    });
 
     this.ui.bindControl('m1', (v) => {
       this.config.m1 = parseFloat(v);
@@ -313,7 +360,7 @@ export class ChaosApp {
     this.ui.updatePendulumParams(this.config);
     this.ui.updatePhaseSpaceInputs(this.config);
     this.ui.updateIntegrationInputs(this.config);
-    this.ui.updateObliqueUI(this.config);
+    this.ui.updateTilingUI(this.config);
     this.ui.ensureDistinctDimensions(this.config.phaseSpace.x.dimension, this.config.phaseSpace.y.dimension);
   }
 
@@ -345,23 +392,14 @@ export class ChaosApp {
     }
   }
 
-  private generateOblique(): void {
-    this.config.oblique = generateObliqueSlice(this.config.system);
-    this.config.phaseSpace.x.min = -1;
-    this.config.phaseSpace.x.max = 1;
-    this.config.phaseSpace.y.min = -1;
-    this.config.phaseSpace.y.max = 1;
-    this.zoomController = new ZoomController(this.config, () => this.onZoomChange());
-    this.ui.updatePhaseSpaceInputs(this.config);
-    this.ui.updateObliqueUI(this.config);
-    this.markStale();
-  }
-
-  private exitOblique(): void {
-    if (this.config.oblique.enabled) {
-      this.config.oblique.enabled = false;
-      this.ui.updateObliqueUI(this.config);
-    }
+  private regenerateTiling(): void {
+    const t = this.config.phaseSpace.tiling;
+    this.config.phaseSpace.tiling = generateTiling(
+      this.config.system,
+      Math.max(1, t.cols),
+      Math.max(1, t.rows),
+      initialVector(this.config),
+    );
   }
 
   private setupZoomControls(): void {
@@ -436,6 +474,10 @@ export class ChaosApp {
   }
 
   private renderCurrentState(): void {
+    if (this.tileMosaic) {
+      this.tileMosaic.render(this.config.resolution, this.config.resolution);
+      return;
+    }
     if (!this.simulator) return;
     const isChunked = this.simulator.isChunkedMode();
 
@@ -464,7 +506,23 @@ export class ChaosApp {
   }
 
   private animate(): void {
-    if (this.simulator) {
+    if (this.tileMosaic) {
+      if (this.playState === 'playing' && !this.tileMosaic.isComplete()) {
+        for (let i = 0; i < 4; i++) this.tileMosaic.step();
+      }
+      this.renderCurrentState();
+
+      const isComplete = this.tileMosaic.isComplete();
+      const tp = this.tileMosaic.getProgress();
+      this.stats.update(this.config, tp.current, this.renderer.getMaxValue(), isComplete);
+      this.ui.updateStats(tp.current, this.renderer.getMaxValue(), this.stats.getFps(), this.zoomController.level);
+      this.ui.updateTilingProgress(!isComplete, tp.current, tp.total);
+
+      if (this.playState === 'playing' && isComplete) {
+        this.playState = 'paused';
+        this.updatePlayButton();
+      }
+    } else if (this.simulator) {
       const isDiv = this.config.vizMode === 'divergence' || this.config.vizMode === 'divergenceDistance';
       const isChunked = this.simulator.isChunkedMode();
 
@@ -489,6 +547,7 @@ export class ChaosApp {
       const isComplete = this.simulator.isComplete();
       this.stats.update(this.config, fc, this.renderer.getMaxValue(), isComplete);
       this.ui.updateStats(fc, this.renderer.getMaxValue(), this.stats.getFps(), this.zoomController.level);
+      this.ui.updateTilingProgress(false, 0, 0);
 
       const isDivAlready = this.config.vizMode === 'divergence' || this.config.vizMode === 'divergenceDistance';
       if (isDivAlready) {
