@@ -1,4 +1,5 @@
-import type { SimulationConfig, PhaseSpaceDimension } from '../types/config.ts';
+import type { SimulationConfig } from '../types/config.ts';
+import { computeDirections, rigidPack, elasticPackA, elasticPackB } from '../types/config.ts';
 import { TextureManager } from '../webgl/textureManager.ts';
 import { FramebufferManager } from '../webgl/framebufferManager.ts';
 import { UniformSetter } from '../webgl/uniformSetter.ts';
@@ -14,11 +15,6 @@ interface CompiledProgram {
   program: WebGLProgram;
   vao: WebGLVertexArrayObject;
 }
-
-const DIM_INDEX: Record<PhaseSpaceDimension, number> = {
-  angle1: 0, velocity1: 1, stretch1: 2, stretchRate1: 3,
-  angle2: 4, velocity2: 5, stretch2: 6, stretchRate2: 7,
-};
 
 export class Simulator {
   private gl: WebGL2RenderingContext;
@@ -167,8 +163,22 @@ export class Simulator {
     }
     this.uniforms.set2f(program, 'u_xRange', ps.x.min, ps.x.max);
     this.uniforms.set2f(program, 'u_yRange', ps.y.min, ps.y.max);
-    this.uniforms.set1i(program, 'u_xDim', DIM_INDEX[ps.x.dimension]);
-    this.uniforms.set1i(program, 'u_yDim', DIM_INDEX[ps.y.dimension]);
+    const dirs = computeDirections(this.config);
+    if (this.systemKey === 'rigid') {
+      const xd = rigidPack(dirs.xDir);
+      const yd = rigidPack(dirs.yDir);
+      this.uniforms.set4f(program, 'u_xDir', xd[0], xd[1], xd[2], xd[3]);
+      this.uniforms.set4f(program, 'u_yDir', yd[0], yd[1], yd[2], yd[3]);
+    } else {
+      const xda = elasticPackA(dirs.xDir);
+      const xdb = elasticPackB(dirs.xDir);
+      const yda = elasticPackA(dirs.yDir);
+      const ydb = elasticPackB(dirs.yDir);
+      this.uniforms.set4f(program, 'u_xDirA', xda[0], xda[1], xda[2], xda[3]);
+      this.uniforms.set4f(program, 'u_xDirB', xdb[0], xdb[1], xdb[2], xdb[3]);
+      this.uniforms.set4f(program, 'u_yDirA', yda[0], yda[1], yda[2], yda[3]);
+      this.uniforms.set4f(program, 'u_yDirB', ydb[0], ydb[1], ydb[2], ydb[3]);
+    }
   }
 
   private detachAll(): void {

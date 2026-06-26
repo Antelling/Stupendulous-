@@ -27,12 +27,19 @@ export interface PhaseSpaceConfig {
   initialValues: Record<PhaseSpaceDimension, number>;
 }
 
+export interface ObliqueSlice {
+  enabled: boolean;
+  xDir: number[];
+  yDir: number[];
+}
+
 export interface SimulationConfig {
   system: SystemType;
   vizMode: VizMode;
   resolution: Resolution;
   chunkSize: ChunkSize;
   phaseSpace: PhaseSpaceConfig;
+  oblique: ObliqueSlice;
   dt: number;
   iterationsPerFrame: number;
   maxIter: number;
@@ -87,6 +94,17 @@ export const DIMENSION_LABELS: Record<PhaseSpaceDimension, string> = {
   stretchRate2: 'Second Stretch Rate ṙ₂',
 };
 
+export const DIM_SYMBOLS: Record<PhaseSpaceDimension, string> = {
+  angle1: 'θ₁',
+  velocity1: 'ω₁',
+  angle2: 'θ₂',
+  velocity2: 'ω₂',
+  stretch1: 'r₁',
+  stretchRate1: 'ṙ₁',
+  stretch2: 'r₂',
+  stretchRate2: 'ṙ₂',
+};
+
 export const DIMENSION_DEFAULTS: Record<PhaseSpaceDimension, { min: number; max: number; initial: number }> = {
   angle1: { min: -Math.PI, max: Math.PI, initial: 0 },
   velocity1: { min: -5, max: 5, initial: 0 },
@@ -99,6 +117,79 @@ export const DIMENSION_DEFAULTS: Record<PhaseSpaceDimension, { min: number; max:
 };
 
 export type ChunkSize = 256 | 512 | 1024 | 2048;
+
+export const DIM_ORDER: PhaseSpaceDimension[] = [
+  'angle1', 'velocity1', 'stretch1', 'stretchRate1',
+  'angle2', 'velocity2', 'stretch2', 'stretchRate2',
+];
+
+export const DIM_SCALE: Record<PhaseSpaceDimension, number> = {
+  angle1: Math.PI,
+  velocity1: 5,
+  angle2: Math.PI,
+  velocity2: 5,
+  stretch1: 0.5,
+  stretchRate1: 5,
+  stretch2: 0.5,
+  stretchRate2: 5,
+};
+
+export function basisVector(dim: PhaseSpaceDimension): number[] {
+  const v = new Array(DIM_ORDER.length).fill(0);
+  v[DIM_ORDER.indexOf(dim)] = 1;
+  return v;
+}
+
+export function computeDirections(config: SimulationConfig): { xDir: number[]; yDir: number[] } {
+  if (config.oblique.enabled) {
+    return { xDir: config.oblique.xDir, yDir: config.oblique.yDir };
+  }
+  return {
+    xDir: basisVector(config.phaseSpace.x.dimension),
+    yDir: basisVector(config.phaseSpace.y.dimension),
+  };
+}
+
+export function rigidPack(dir8: number[]): [number, number, number, number] {
+  return [dir8[0], dir8[1], dir8[4], dir8[5]];
+}
+
+export function elasticPackA(dir8: number[]): [number, number, number, number] {
+  return [dir8[0], dir8[1], dir8[2], dir8[3]];
+}
+
+export function elasticPackB(dir8: number[]): [number, number, number, number] {
+  return [dir8[4], dir8[5], dir8[6], dir8[7]];
+}
+
+export function generateObliqueSlice(system: SystemType): ObliqueSlice {
+  const available = system === 'rigid' ? RIGID_DIMENSIONS : ELASTIC_DIMENSIONS;
+  const dot = (a: number[], b: number[]) => {
+    let s = 0;
+    for (let i = 0; i < a.length; i++) s += a[i] * b[i];
+    return s;
+  };
+  const raw = (): number[] => {
+    const v = new Array(DIM_ORDER.length).fill(0);
+    for (const d of available) {
+      const idx = DIM_ORDER.indexOf(d);
+      v[idx] = (Math.random() * 2 - 1) * DIM_SCALE[d];
+    }
+    return v;
+  };
+  const orthogonalize = (base: number[], other: number[]): number[] => {
+    const denom = dot(base, base) || 1;
+    const p = dot(other, base) / denom;
+    return other.map((v, i) => v - p * base[i]);
+  };
+
+  const xDir = raw();
+  let yDir = orthogonalize(xDir, raw());
+  if (dot(yDir, yDir) < 1e-6) {
+    yDir = orthogonalize(xDir, raw());
+  }
+  return { enabled: true, xDir, yDir };
+}
 
 export const DEFAULT_CONFIG: SimulationConfig = {
   system: 'rigid',
@@ -118,6 +209,11 @@ export const DEFAULT_CONFIG: SimulationConfig = {
       stretch2: 0,
       stretchRate2: 0,
     },
+  },
+  oblique: {
+    enabled: false,
+    xDir: basisVector('angle1'),
+    yDir: basisVector('angle2'),
   },
   dt: 0.002,
   iterationsPerFrame: 10,

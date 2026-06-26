@@ -4,25 +4,12 @@ import nonlinearFrag from '../shaders/fragments/nonlinear.glsl?raw';
 import bob2Frag from '../shaders/fragments/bob2.glsl?raw';
 import hashFrag from '../shaders/fragments/hash.glsl?raw';
 
-import type { PhaseSpaceDimension } from '../types/config.ts';
-
 type System = 'rigid' | 'elastic' | 'nonlinear';
 type Mode = 'distance' | 'divergence' | 'divergenceDistance';
 
 const HEADER = `#version 300 es
 precision highp float;
 `;
-
-const DIM_INDEX: Record<PhaseSpaceDimension, number> = {
-  angle1: 0,
-  velocity1: 1,
-  stretch1: 2,
-  stretchRate1: 3,
-  angle2: 4,
-  velocity2: 5,
-  stretch2: 6,
-  stretchRate2: 7,
-};
 
 export class ShaderBuilder {
   static buildInit(system: System, mode: Mode): string {
@@ -107,28 +94,13 @@ float samplePerturb(vec2 hi) {
 `;
   }
 
-  private static mappingHelpers(): string {
-    return `
-void applyMapping(inout vec4 a, inout vec4 b, int dim, float value) {
-    if (dim == 0) a.x += value;
-    else if (dim == 1) a.y += value;
-    else if (dim == 2) a.z += value;
-    else if (dim == 3) a.w += value;
-    else if (dim == 4) b.x += value;
-    else if (dim == 5) b.y += value;
-    else if (dim == 6) b.z += value;
-    else if (dim == 7) b.w += value;
-}
-`;
-  }
-
   private static rigidDistanceInit(): string {
     return `${HEADER}
 uniform vec4 u_initialState;
 uniform vec2 u_xRange;
 uniform vec2 u_yRange;
-uniform int u_xDim;
-uniform int u_yDim;
+uniform vec4 u_xDir;
+uniform vec4 u_yDir;
 uniform vec2 u_chunkOffset;
 uniform float u_chunkScale;
 in vec2 v_uv;
@@ -138,17 +110,9 @@ ${this.chunkCoordHelpers()}
 
 void main() {
     vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
-    vec4 state = u_initialState;
     float dx = mix(u_xRange.x, u_xRange.y, uv.x);
     float dy = mix(u_yRange.x, u_yRange.y, uv.y);
-    if (u_xDim == 0) state.x += dx;
-    else if (u_xDim == 1) state.y += dx;
-    else if (u_xDim == 4) state.z += dx;
-    else if (u_xDim == 5) state.w += dx;
-    if (u_yDim == 0) state.x += dy;
-    else if (u_yDim == 1) state.y += dy;
-    else if (u_yDim == 4) state.z += dy;
-    else if (u_yDim == 5) state.w += dy;
+    vec4 state = u_initialState + dx * u_xDir + dy * u_yDir;
     fragColor = state;
 }`;
   }
@@ -158,8 +122,8 @@ void main() {
 uniform vec4 u_initialState;
 uniform vec2 u_xRange;
 uniform vec2 u_yRange;
-uniform int u_xDim;
-uniform int u_yDim;
+uniform vec4 u_xDir;
+uniform vec4 u_yDir;
 uniform float u_perturb;
 uniform float u_seed;
 uniform vec2 u_chunkOffset;
@@ -175,17 +139,9 @@ ${this.chunkCoordHelpers()}
 
 void main() {
     vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
-    vec4 state = u_initialState;
     float dx = mix(u_xRange.x, u_xRange.y, uv.x);
     float dy = mix(u_yRange.x, u_yRange.y, uv.y);
-    if (u_xDim == 0) state.x += dx;
-    else if (u_xDim == 1) state.y += dx;
-    else if (u_xDim == 4) state.z += dx;
-    else if (u_xDim == 5) state.w += dx;
-    if (u_yDim == 0) state.x += dy;
-    else if (u_yDim == 1) state.y += dy;
-    else if (u_yDim == 4) state.z += dy;
-    else if (u_yDim == 5) state.w += dy;
+    vec4 state = u_initialState + dx * u_xDir + dy * u_yDir;
 
     float perturb_theta1 = samplePerturb(uv * 1000.0 + u_seed);
     float perturb_theta2 = samplePerturb(uv * 1000.0 + vec2(100.0, u_seed));
@@ -202,25 +158,24 @@ uniform vec4 u_initialA;
 uniform vec4 u_initialB;
 uniform vec2 u_xRange;
 uniform vec2 u_yRange;
-uniform int u_xDim;
-uniform int u_yDim;
+uniform vec4 u_xDirA;
+uniform vec4 u_xDirB;
+uniform vec4 u_yDirA;
+uniform vec4 u_yDirB;
 uniform vec2 u_chunkOffset;
 uniform float u_chunkScale;
 in vec2 v_uv;
 layout(location = 0) out vec4 stateA;
 layout(location = 1) out vec4 stateB;
 
-${this.mappingHelpers()}
 ${this.chunkCoordHelpers()}
 
 void main() {
     vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
-    vec4 a = u_initialA;
-    vec4 b = u_initialB;
     float dx = mix(u_xRange.x, u_xRange.y, uv.x);
     float dy = mix(u_yRange.x, u_yRange.y, uv.y);
-    applyMapping(a, b, u_xDim, dx);
-    applyMapping(a, b, u_yDim, dy);
+    vec4 a = u_initialA + dx * u_xDirA + dy * u_yDirA;
+    vec4 b = u_initialB + dx * u_xDirB + dy * u_yDirB;
     stateA = a;
     stateB = b;
 }`;
@@ -236,8 +191,10 @@ uniform vec4 u_initialA;
 uniform vec4 u_initialB;
 uniform vec2 u_xRange;
 uniform vec2 u_yRange;
-uniform int u_xDim;
-uniform int u_yDim;
+uniform vec4 u_xDirA;
+uniform vec4 u_xDirB;
+uniform vec4 u_yDirA;
+uniform vec4 u_yDirB;
 uniform float u_perturb;
 uniform float u_seed;
 uniform vec2 u_chunkOffset;
@@ -251,17 +208,14 @@ layout(location = 4) out vec4 divergenceData;
 
 ${hashFrag}
 ${this.perturbHelpers()}
-${this.mappingHelpers()}
 ${this.chunkCoordHelpers()}
 
 void main() {
     vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
-    vec4 a = u_initialA;
-    vec4 b = u_initialB;
     float dx = mix(u_xRange.x, u_xRange.y, uv.x);
     float dy = mix(u_yRange.x, u_yRange.y, uv.y);
-    applyMapping(a, b, u_xDim, dx);
-    applyMapping(a, b, u_yDim, dy);
+    vec4 a = u_initialA + dx * u_xDirA + dy * u_yDirA;
+    vec4 b = u_initialB + dx * u_xDirB + dy * u_yDirB;
 
     float perturb_theta1 = samplePerturb(uv * 1000.0 + u_seed);
     float perturb_theta2 = samplePerturb(uv * 1000.0 + vec2(100.0, u_seed));
@@ -281,8 +235,10 @@ uniform vec4 u_initialA;
 uniform vec4 u_initialB;
 uniform vec2 u_xRange;
 uniform vec2 u_yRange;
-uniform int u_xDim;
-uniform int u_yDim;
+uniform vec4 u_xDirA;
+uniform vec4 u_xDirB;
+uniform vec4 u_yDirA;
+uniform vec4 u_yDirB;
 uniform float u_perturb;
 uniform float u_seed;
 uniform vec2 u_chunkOffset;
@@ -296,17 +252,14 @@ layout(location = 4) out vec4 divergenceData;
 
 ${hashFrag}
 ${this.perturbHelpers()}
-${this.mappingHelpers()}
 ${this.chunkCoordHelpers()}
 
 void main() {
     vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
-    vec4 a = u_initialA;
-    vec4 b = u_initialB;
     float dx = mix(u_xRange.x, u_xRange.y, uv.x);
     float dy = mix(u_yRange.x, u_yRange.y, uv.y);
-    applyMapping(a, b, u_xDim, dx);
-    applyMapping(a, b, u_yDim, dy);
+    vec4 a = u_initialA + dx * u_xDirA + dy * u_yDirA;
+    vec4 b = u_initialB + dx * u_xDirB + dy * u_yDirB;
 
     float perturb_theta1 = samplePerturb(uv * 1000.0 + u_seed);
     float perturb_theta2 = samplePerturb(uv * 1000.0 + vec2(100.0, u_seed));
@@ -763,8 +716,8 @@ void main() {
 uniform vec4 u_initialState;
 uniform vec2 u_xRange;
 uniform vec2 u_yRange;
-uniform int u_xDim;
-uniform int u_yDim;
+uniform vec4 u_xDir;
+uniform vec4 u_yDir;
 uniform float u_perturb;
 uniform float u_seed;
 uniform float u_L1;
@@ -783,17 +736,9 @@ ${this.chunkCoordHelpers()}
 
 void main() {
     vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
-    vec4 state = u_initialState;
     float dx = mix(u_xRange.x, u_xRange.y, uv.x);
     float dy = mix(u_yRange.x, u_yRange.y, uv.y);
-    if (u_xDim == 0) state.x += dx;
-    else if (u_xDim == 1) state.y += dx;
-    else if (u_xDim == 4) state.z += dx;
-    else if (u_xDim == 5) state.w += dx;
-    if (u_yDim == 0) state.x += dy;
-    else if (u_yDim == 1) state.y += dy;
-    else if (u_yDim == 4) state.z += dy;
-    else if (u_yDim == 5) state.w += dy;
+    vec4 state = u_initialState + dx * u_xDir + dy * u_yDir;
 
     float perturb_theta1 = samplePerturb(uv * 1000.0 + u_seed);
     float perturb_theta2 = samplePerturb(uv * 1000.0 + vec2(100.0, u_seed));
@@ -813,8 +758,10 @@ uniform vec4 u_initialA;
 uniform vec4 u_initialB;
 uniform vec2 u_xRange;
 uniform vec2 u_yRange;
-uniform int u_xDim;
-uniform int u_yDim;
+uniform vec4 u_xDirA;
+uniform vec4 u_xDirB;
+uniform vec4 u_yDirA;
+uniform vec4 u_yDirB;
 uniform float u_perturb;
 uniform float u_seed;
 uniform float u_L1;
@@ -831,17 +778,14 @@ layout(location = 4) out vec4 divergenceData;
 ${hashFrag}
 ${this.perturbHelpers()}
 ${bob2Frag}
-${this.mappingHelpers()}
 ${this.chunkCoordHelpers()}
 
 void main() {
     vec2 uv = getChunkedUV(v_uv, u_chunkOffset, u_chunkScale);
-    vec4 a = u_initialA;
-    vec4 b = u_initialB;
     float dx = mix(u_xRange.x, u_xRange.y, uv.x);
     float dy = mix(u_yRange.x, u_yRange.y, uv.y);
-    applyMapping(a, b, u_xDim, dx);
-    applyMapping(a, b, u_yDim, dy);
+    vec4 a = u_initialA + dx * u_xDirA + dy * u_yDirA;
+    vec4 b = u_initialB + dx * u_xDirB + dy * u_yDirB;
 
     float perturb_theta1 = samplePerturb(uv * 1000.0 + u_seed);
     float perturb_theta2 = samplePerturb(uv * 1000.0 + vec2(100.0, u_seed));

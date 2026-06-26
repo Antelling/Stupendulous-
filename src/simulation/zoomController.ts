@@ -6,10 +6,16 @@ export class ZoomController {
     y: PhaseSpaceAxis;
   }> = [];
 
+  private homeX: { min: number; max: number };
+  private homeY: { min: number; max: number };
+
   constructor(
     private config: SimulationConfig,
     private onZoomChange: () => void
-  ) {}
+  ) {
+    this.homeX = { min: config.phaseSpace.x.min, max: config.phaseSpace.x.max };
+    this.homeY = { min: config.phaseSpace.y.min, max: config.phaseSpace.y.max };
+  }
 
   get level(): number {
     return this.zoomHistory.length + 1;
@@ -58,20 +64,20 @@ export class ZoomController {
       this.config.phaseSpace.x = prev.x;
       this.config.phaseSpace.y = prev.y;
     } else {
-      this.config.phaseSpace.x.min = -Math.PI;
-      this.config.phaseSpace.x.max = Math.PI;
-      this.config.phaseSpace.y.min = -Math.PI;
-      this.config.phaseSpace.y.max = Math.PI;
+      this.config.phaseSpace.x.min = this.homeX.min;
+      this.config.phaseSpace.x.max = this.homeX.max;
+      this.config.phaseSpace.y.min = this.homeY.min;
+      this.config.phaseSpace.y.max = this.homeY.max;
     }
     this.onZoomChange();
   }
 
   reset(): void {
     this.zoomHistory = [];
-    this.config.phaseSpace.x.min = -Math.PI;
-    this.config.phaseSpace.x.max = Math.PI;
-    this.config.phaseSpace.y.min = -Math.PI;
-    this.config.phaseSpace.y.max = Math.PI;
+    this.config.phaseSpace.x.min = this.homeX.min;
+    this.config.phaseSpace.x.max = this.homeX.max;
+    this.config.phaseSpace.y.min = this.homeY.min;
+    this.config.phaseSpace.y.max = this.homeY.max;
     this.onZoomChange();
   }
 }

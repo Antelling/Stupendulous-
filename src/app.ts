@@ -1,5 +1,5 @@
 import type { SimulationConfig, PhaseSpaceDimension } from './types/config.ts';
-import { DEFAULT_CONFIG, ELASTIC_DIMENSIONS, RIGID_DIMENSIONS } from './types/config.ts';
+import { DEFAULT_CONFIG, ELASTIC_DIMENSIONS, RIGID_DIMENSIONS, generateObliqueSlice } from './types/config.ts';
 import { QuadBuffer } from './webgl/quadBuffer.ts';
 import { TextureManager } from './webgl/textureManager.ts';
 import { UniformSetter } from './webgl/uniformSetter.ts';
@@ -49,10 +49,12 @@ export class ChaosApp {
     this.stats = new StatsTracker();
     this.preview = new PendulumPreview(document.getElementById('canvasWrapper')!, canvas, this.gl, this.config);
     this.preview.onConfigChange = () => {
+      this.config.oblique.enabled = false;
       this.handleSystemChange();
       this.ui.updateModeUI(this.config);
       this.ui.updatePendulumParams(this.config);
       this.ui.updatePhaseSpaceInputs(this.config);
+      this.ui.updateObliqueUI(this.config);
       this.markStale();
     };
 
@@ -140,10 +142,12 @@ export class ChaosApp {
 
     this.ui.bindControl('systemType', (v) => {
       this.config.system = v as SimulationConfig['system'];
+      this.config.oblique.enabled = false;
       this.handleSystemChange();
       this.ui.updateModeUI(this.config);
       this.ui.updatePendulumParams(this.config);
       this.ui.updatePhaseSpaceInputs(this.config);
+      this.ui.updateObliqueUI(this.config);
       this.markStale();
     });
 
@@ -167,6 +171,7 @@ export class ChaosApp {
     }, 'change');
 
     this.ui.bindControl('xDimension', (v) => {
+      this.exitOblique();
       this.config.phaseSpace.x.dimension = v as PhaseSpaceDimension;
       this.applyAxisDefaults('x');
       this.ui.updatePhaseSpaceInputs(this.config);
@@ -176,6 +181,7 @@ export class ChaosApp {
     }, 'change');
 
     this.ui.bindControl('yDimension', (v) => {
+      this.exitOblique();
       this.config.phaseSpace.y.dimension = v as PhaseSpaceDimension;
       this.applyAxisDefaults('y');
       this.ui.updatePhaseSpaceInputs(this.config);
@@ -264,6 +270,8 @@ export class ChaosApp {
 
     this.ui.bindButton('downloadBtn', () => this.download());
 
+    this.ui.bindButton('obliqueBtn', () => this.generateOblique());
+
     this.ui.bindControl('m1', (v) => {
       this.config.m1 = parseFloat(v);
       this.ui.setTextContent('m1Value', this.config.m1.toFixed(1));
@@ -305,6 +313,7 @@ export class ChaosApp {
     this.ui.updatePendulumParams(this.config);
     this.ui.updatePhaseSpaceInputs(this.config);
     this.ui.updateIntegrationInputs(this.config);
+    this.ui.updateObliqueUI(this.config);
     this.ui.ensureDistinctDimensions(this.config.phaseSpace.x.dimension, this.config.phaseSpace.y.dimension);
   }
 
@@ -333,6 +342,25 @@ export class ChaosApp {
     } else {
       this.config.phaseSpace[axis].min = -5;
       this.config.phaseSpace[axis].max = 5;
+    }
+  }
+
+  private generateOblique(): void {
+    this.config.oblique = generateObliqueSlice(this.config.system);
+    this.config.phaseSpace.x.min = -1;
+    this.config.phaseSpace.x.max = 1;
+    this.config.phaseSpace.y.min = -1;
+    this.config.phaseSpace.y.max = 1;
+    this.zoomController = new ZoomController(this.config, () => this.onZoomChange());
+    this.ui.updatePhaseSpaceInputs(this.config);
+    this.ui.updateObliqueUI(this.config);
+    this.markStale();
+  }
+
+  private exitOblique(): void {
+    if (this.config.oblique.enabled) {
+      this.config.oblique.enabled = false;
+      this.ui.updateObliqueUI(this.config);
     }
   }
 

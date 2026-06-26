@@ -1,4 +1,5 @@
 import type { SimulationConfig, SystemType } from '../types/config.ts';
+import { computeDirections, rigidPack, elasticPackA, elasticPackB } from '../types/config.ts';
 import { ShaderCompiler } from '../webgl/shaderCompiler.ts';
 import { ShaderBuilder } from '../webgl/shaderBuilder.ts';
 import { FrequencyAnalyzer } from './frequencyAnalyzer.ts';
@@ -13,11 +14,6 @@ interface CompiledProg {
   program: WebGLProgram;
   vao: WebGLVertexArrayObject;
 }
-
-const DIM_INDEX: Record<string, number> = {
-  angle1: 0, velocity1: 1, stretch1: 2, stretchRate1: 3,
-  angle2: 4, velocity2: 5, stretch2: 6, stretchRate2: 7,
-};
 
 export class PendulumPreview {
   private gl: WebGL2RenderingContext;
@@ -367,26 +363,35 @@ export class PendulumPreview {
     const gl = this.gl;
     const p = this.use(this.initProg);
     const iv = this.config.phaseSpace.initialValues;
+    const iv8 = [iv.angle1, iv.velocity1, iv.stretch1, iv.stretchRate1, iv.angle2, iv.velocity2, iv.stretch2, iv.stretchRate2];
+    const dirs = computeDirections(this.config);
 
     if (this.systemKey === 'rigid') {
-      const state = [iv.angle1, iv.velocity1, iv.angle2, iv.velocity2];
-      const xDim = DIM_INDEX[this.config.phaseSpace.x.dimension];
-      const yDim = DIM_INDEX[this.config.phaseSpace.y.dimension];
-      const rigidIndex = (dim: number) => dim === 0 ? 0 : dim === 1 ? 1 : dim === 4 ? 2 : dim === 5 ? 3 : -1;
-      const xi = rigidIndex(xDim);
-      const yi = rigidIndex(yDim);
-      if (xi >= 0) state[xi] += dx;
-      if (yi >= 0) state[yi] += dy;
-      gl.uniform4f(this.u(p, 'u_initialState'), state[0], state[1], state[2], state[3]);
+      const o = rigidPack(iv8);
+      const xd = rigidPack(dirs.xDir);
+      const yd = rigidPack(dirs.yDir);
+      gl.uniform4f(this.u(p, 'u_initialState'),
+        o[0] + dx * xd[0] + dy * yd[0],
+        o[1] + dx * xd[1] + dy * yd[1],
+        o[2] + dx * xd[2] + dy * yd[2],
+        o[3] + dx * xd[3] + dy * yd[3]);
     } else {
-      const a = [iv.angle1, iv.velocity1, iv.stretch1, iv.stretchRate1];
-      const b = [iv.angle2, iv.velocity2, iv.stretch2, iv.stretchRate2];
-      const xDim = DIM_INDEX[this.config.phaseSpace.x.dimension];
-      const yDim = DIM_INDEX[this.config.phaseSpace.y.dimension];
-      if (xDim < 4) a[xDim] += dx; else b[xDim - 4] += dx;
-      if (yDim < 4) a[yDim] += dy; else b[yDim - 4] += dy;
-      gl.uniform4f(this.u(p, 'u_initialA'), a[0], a[1], a[2], a[3]);
-      gl.uniform4f(this.u(p, 'u_initialB'), b[0], b[1], b[2], b[3]);
+      const oa = elasticPackA(iv8);
+      const ob = elasticPackB(iv8);
+      const xda = elasticPackA(dirs.xDir);
+      const xdb = elasticPackB(dirs.xDir);
+      const yda = elasticPackA(dirs.yDir);
+      const ydb = elasticPackB(dirs.yDir);
+      gl.uniform4f(this.u(p, 'u_initialA'),
+        oa[0] + dx * xda[0] + dy * yda[0],
+        oa[1] + dx * xda[1] + dy * yda[1],
+        oa[2] + dx * xda[2] + dy * yda[2],
+        oa[3] + dx * xda[3] + dy * yda[3]);
+      gl.uniform4f(this.u(p, 'u_initialB'),
+        ob[0] + dx * xdb[0] + dy * ydb[0],
+        ob[1] + dx * xdb[1] + dy * ydb[1],
+        ob[2] + dx * xdb[2] + dy * ydb[2],
+        ob[3] + dx * xdb[3] + dy * ydb[3]);
     }
 
     gl.uniform1f(this.u(p, 'u_perturb'), this.config.perturb);

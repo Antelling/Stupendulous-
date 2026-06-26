@@ -1,5 +1,5 @@
 import type { SimulationConfig, Colormap, PhaseSpaceDimension } from '../types/config.ts';
-import { SYSTEM_NAMES, MODE_NAMES, DIMENSION_LABELS, ELASTIC_DIMENSIONS } from '../types/config.ts';
+import { SYSTEM_NAMES, MODE_NAMES, DIMENSION_LABELS, ELASTIC_DIMENSIONS, DIM_ORDER, DIM_SYMBOLS } from '../types/config.ts';
 
 export class UIController {
   private elements: Record<string, HTMLElement> = {};
@@ -16,6 +16,7 @@ export class UIController {
       'initStretch1', 'initStretchRate1', 'initStretch2', 'initStretchRate2',
       'dt', 'iterations', 'maxIter', 'perturb',
       'resetBtn', 'downloadBtn', 'zoomOutBtn', 'playBtn',
+      'obliqueBtn', 'obliqueIndicator',
       'modeIndicator', 'subtitle', 'legendGradient',
       'frameCount', 'maxDistance', 'fps', 'zoomLevel',
       'iterValue', 'perturbValue',
@@ -100,6 +101,24 @@ export class UIController {
       gradient.style.background = colormap === 6
         ? 'linear-gradient(90deg, hsl(0,80%,50%), hsl(60,80%,50%), hsl(120,80%,50%), hsl(180,80%,50%), hsl(240,80%,50%), hsl(300,80%,50%))'
         : 'linear-gradient(90deg, rgb(68, 1, 84), rgb(33, 145, 140), rgb(253, 231, 37))';
+    }
+  }
+
+  updateObliqueUI(config: SimulationConfig): void {
+    const ind = this.getElement('obliqueIndicator') as HTMLElement | null;
+    if (!ind) return;
+    if (config.oblique.enabled) {
+      ind.style.display = 'inline-block';
+      const describe = (dir: number[]): string => {
+        const parts: string[] = [];
+        for (let i = 0; i < dir.length; i++) {
+          if (Math.abs(dir[i]) > 1e-9) parts.push(DIM_SYMBOLS[DIM_ORDER[i]]);
+        }
+        return parts.length ? parts.join('+') : '∅';
+      };
+      ind.textContent = `⚡ Oblique  X:${describe(config.oblique.xDir)}  Y:${describe(config.oblique.yDir)}`;
+    } else {
+      ind.style.display = 'none';
     }
   }
 
